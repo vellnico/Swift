@@ -1,0 +1,12 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/swift ./cmd/swift"
+  entrypoint = ["./tmp/swift", "serve", "-config", ""]
+  include_ext = ["go", "sql"]
+  exclude_dir = ["web", "tmp", "bin", ".cache", ".data", "node_modules"]
+  delay = 300
+
+[log]
+  time = false

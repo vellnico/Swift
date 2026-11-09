@@ -2,9 +2,15 @@
 /bin/
 /.cache/
 /tmp/
+/dist/
 node_modules/
+/web/dist/*
+!/web/dist/.gitkeep
+/web/sub/dist/*
+!/web/sub/dist/.gitkeep
 
 # Local data
+/.data/
 *.db
 *.db-journal
 *.db-wal
