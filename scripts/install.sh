@@ -507,7 +507,11 @@ do_install() {
 	else
 		step 64 "$(L "Profiles and certificate" "Профили и сертификат")"
 	fi
-	local args=(-config "$ETC/swift.toml" -address "$ADDRESS" -lang "$UI_LANG")
+	local args=(-config "$ETC/swift.toml" -address "$ADDRESS")
+	# releases before v0.2.0 (--version) have no -lang; -h exits non-zero
+	local help
+	help="$("$BIN" setup -h 2>&1 || true)"
+	case "$help" in *-lang*) args+=(-lang "$UI_LANG") ;; esac
 	if [ -n "$DOMAIN" ]; then args+=(-domain "$DOMAIN"); fi
 	"$BIN" setup "${args[@]}"
 	step 84 "$(L "Network settings" "Настройка сети")"
