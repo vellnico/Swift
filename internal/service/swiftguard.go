@@ -159,8 +159,12 @@ func (g *UpdateGuard) Run(ctx context.Context) error {
 			g.logf("%s confirmed itself", p.To)
 			return g.withStore(ctx, func(st *store.Store) error { return st.SetSetting(ctx, swiftPendingKey, "") })
 		}
-		if n, err := g.Systemd.NRestarts(ctx, g.Unit); baseErr == nil && err == nil && n-base >= g.MaxRestarts {
-			return g.rollback(ctx, p, "crash_loop")
+		if n, err := g.Systemd.NRestarts(ctx, g.Unit); baseErr == nil && err == nil {
+			// a manual `systemctl restart` resets the counter: count from the lowest value seen
+			base = min(base, n)
+			if n-base >= g.MaxRestarts {
+				return g.rollback(ctx, p, "crash_loop")
+			}
 		}
 		if time.Now().After(deadline) {
 			return g.rollback(ctx, p, "not_confirmed")

@@ -150,7 +150,7 @@ func (f *fakeSystemd) record(s string) error {
 	return f.fail
 }
 
-func (f *fakeSystemd) Stop(_ context.Context, unit string) error { return f.record("stop " + unit) }
+func (f *fakeSystemd) Stop(_ context.Context, unit string) error  { return f.record("stop " + unit) }
 func (f *fakeSystemd) Start(_ context.Context, unit string) error { return f.record("start " + unit) }
 func (f *fakeSystemd) RunTransient(_ context.Context, unit string, argv ...string) error {
 	return f.record("run " + strings.Join(argv, " "))
