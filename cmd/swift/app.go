@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,9 +10,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/bus"
+	certsPkg "github.com/vellnico/swift/internal/certs"
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
@@ -36,6 +39,16 @@ type app struct {
 	subs     *service.Subscriptions
 	sub      *web.SubServer
 	stats    *sysstat.Collector
+	holder   *certsPkg.Holder
+}
+
+// startCerts loads (or creates) the certificate for TLS listeners and keeps it renewed.
+func (a *app) startCerts(ctx context.Context) error {
+	if _, err := a.certs.Ensure(ctx); err != nil {
+		return fmt.Errorf("certificate: %w", err)
+	}
+	go a.certs.RunRenewal(ctx, 24*time.Hour)
+	return nil
 }
 
 // handlers returns the panel and subscription handlers; with one shared port
@@ -94,7 +107,16 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		},
 	}
 
-	certs := &service.Certs{Store: st, Dir: filepath.Join(cfg.DataDir, "certs")}
+	certDir := filepath.Join(cfg.DataDir, "certs")
+	a.holder = &certsPkg.Holder{}
+	certs := &service.Certs{
+		Store:  st,
+		Dir:    certDir,
+		Holder: a.holder,
+		Issuer: &certsPkg.LegoIssuer{Dir: certDir, Email: cfg.ACMEEmail, Staging: cfg.ACMEStaging},
+		Apply:  a.xray.Reload,
+		Event:  a.event,
+	}
 	a.xray.Certs = certs.Files
 	a.certs = certs
 	a.profiles = &service.Profiles{
@@ -106,7 +128,7 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 	}
 
 	a.users = &service.Users{Store: st, Xray: a.xray}
-	a.subs = &service.Subscriptions{Store: st, Certs: certs}
+	a.subs = &service.Subscriptions{Store: st, Certs: certs, Scheme: func(context.Context) string { return service.Scheme(cfg.InsecureHTTP) }}
 	a.sub = &web.SubServer{Store: st, Subs: a.subs, Assets: webassets.SubPage(), Dict: webassets.Dictionary, Log: log}
 
 	a.srv = web.New(web.Deps{
@@ -119,6 +141,7 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		Profiles:  a.profiles,
 		Users:     a.users,
 		Subs:      a.subs,
+		Certs:     certs,
 		OnEvent:   func(ev store.Event) { a.bus.Publish("event", ev) },
 	})
 	a.srv.Handle("GET /api/xray/status", func(w http.ResponseWriter, _ *http.Request) {

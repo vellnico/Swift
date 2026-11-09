@@ -28,6 +28,7 @@ type Deps struct {
 	Profiles  *service.Profiles
 	Users     *service.Users
 	Subs      *service.Subscriptions
+	Certs     *service.Certs
 	// OnEvent is called after a journal entry is written (used to push it over SSE).
 	OnEvent func(store.Event)
 }
@@ -54,6 +55,7 @@ func New(d Deps) *Server {
 	s.Handle("GET /api/events", s.events)
 	s.registerProfiles()
 	s.registerUsers()
+	s.registerCerts()
 	return s
 }
 

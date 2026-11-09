@@ -25,6 +25,11 @@ type Config struct {
 	PanelPath string
 	SubPort   int
 	Dev       bool
+	// InsecureHTTP serves the panel and subscriptions without TLS. Local development only.
+	InsecureHTTP bool
+	// ACMEStaging uses the Let's Encrypt staging CA (for testing issuance).
+	ACMEStaging bool
+	ACMEEmail   string
 }
 
 func Default() Config {
@@ -74,7 +79,7 @@ func Load(path string, env func(string) string) (Config, error) {
 	return c, nil
 }
 
-var keys = []string{"data_dir", "lib_dir", "xray_bin", "listen", "panel_port", "panel_path", "sub_port", "dev"}
+var keys = []string{"data_dir", "lib_dir", "xray_bin", "listen", "panel_port", "panel_path", "sub_port", "dev", "insecure_http", "acme_staging", "acme_email"}
 
 func (c *Config) apply(kv map[string]string) error {
 	for k, v := range kv {
@@ -96,6 +101,12 @@ func (c *Config) apply(kv map[string]string) error {
 			c.SubPort, err = port(v)
 		case "dev":
 			c.Dev, err = strconv.ParseBool(v)
+		case "insecure_http":
+			c.InsecureHTTP, err = strconv.ParseBool(v)
+		case "acme_staging":
+			c.ACMEStaging, err = strconv.ParseBool(v)
+		case "acme_email":
+			c.ACMEEmail = v
 		default:
 			return fmt.Errorf("unknown key %q", k)
 		}

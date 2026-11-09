@@ -11,6 +11,7 @@ import (
 
 	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/config"
+	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
 )
 
@@ -51,11 +52,8 @@ func panelURL(ctx context.Context, cfg config.Config, st *store.Store) (string, 
 	if err != nil || host == "" {
 		host = "<server-ip>"
 	}
-	return fmt.Sprintf("%s://%s/%s/", panelScheme(ctx, st), net.JoinHostPort(host, strconv.Itoa(port)), path), nil
+	return fmt.Sprintf("%s://%s/%s/", service.Scheme(cfg.InsecureHTTP), net.JoinHostPort(host, strconv.Itoa(port)), path), nil
 }
-
-// panelScheme is http until certificates are configured (phase 7).
-func panelScheme(context.Context, *store.Store) string { return "http" }
 
 func adminShow(ctx context.Context, cfg config.Config, st *store.Store, w io.Writer) error {
 	url, err := panelURL(ctx, cfg, st)

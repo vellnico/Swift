@@ -156,7 +156,13 @@ func (x *Xray) Prepare(ctx context.Context) error {
 }
 
 // Apply regenerates the config, restarts xray and rolls back if it does not come up.
-func (x *Xray) Apply(ctx context.Context) error {
+func (x *Xray) Apply(ctx context.Context) error { return x.apply(ctx, false) }
+
+// Reload is Apply that restarts xray even when the config text is unchanged,
+// e.g. after the certificate files were replaced in place.
+func (x *Xray) Reload(ctx context.Context) error { return x.apply(ctx, true) }
+
+func (x *Xray) apply(ctx context.Context, force bool) error {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.progress("checking", "")
@@ -166,7 +172,7 @@ func (x *Xray) Apply(ctx context.Context) error {
 		x.progress("error", err.Error())
 		return err
 	}
-	if !changed && x.Sup.Status().Status == xray.StatusRunning {
+	if !force && !changed && x.Sup.Status().Status == xray.StatusRunning {
 		x.progress("done", "")
 		return nil
 	}

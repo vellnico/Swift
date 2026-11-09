@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	stdlog "log"
 	"log/slog"
 	"math/big"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
+	"github.com/vellnico/swift/internal/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -103,6 +105,9 @@ func serve(cfgPath string, stdout io.Writer) error {
 		return err
 	}
 	go sessionGC(ctx, st, log)
+	if err := a.startCerts(ctx); err != nil {
+		return err
+	}
 	a.startXray(ctx)
 	a.startStats(ctx)
 
@@ -123,12 +128,24 @@ func serve(cfgPath string, stdout io.Writer) error {
 	if host == "" {
 		host = "localhost"
 	}
-	fmt.Fprintf(stdout, "Swift panel: http://%s/%s/\n", net.JoinHostPort(host, strconv.Itoa(port)), path)
+	fmt.Fprintf(stdout, "Swift panel: %s://%s/%s/\n", service.Scheme(cfg.InsecureHTTP), net.JoinHostPort(host, strconv.Itoa(port)), path)
 	fmt.Fprintf(stdout, "Subscriptions: port %d\n", subPort)
+	if cfg.InsecureHTTP {
+		log.Warn("serving without TLS (insecure_http); use only for local development")
+	}
 
 	errc := make(chan error, len(servers))
 	for i, hs := range servers {
-		go func() { errc <- hs.Serve(listeners[i]) }()
+		go func() {
+			if cfg.InsecureHTTP {
+				errc <- hs.Serve(listeners[i])
+				return
+			}
+			// certificates come from GetCertificate and can change while serving
+			hs.TLSConfig = a.holder.TLSConfig()
+			hs.ErrorLog = stdlog.New(io.Discard, "", 0) // handshake noise from scanners
+			errc <- hs.ServeTLS(web.TLSOnly(listeners[i]), "", "")
+		}()
 	}
 	select {
 	case err := <-errc:

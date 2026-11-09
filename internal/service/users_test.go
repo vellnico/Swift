@@ -86,7 +86,7 @@ func TestSubscriptionEndpointsAndURL(t *testing.T) {
 		t.Fatalf("domain: %q", url)
 	}
 
-	if _, err := certs.IssueSelfSigned(ctx); err != nil {
+	if _, err := certs.Ensure(ctx); err != nil {
 		t.Fatal(err)
 	}
 	tls, err := subs.TLS(ctx)
