@@ -11,7 +11,7 @@ STATICCHECK_VERSION := 2026.2.2
 
 export CGO_ENABLED := 0
 
-.PHONY: dev build web-deps web go-build test integration install-test lint xray golden clean
+.PHONY: dev build web-deps web go-build test integration install-test lint xray golden clean e2e
 
 web/node_modules/.package-lock.json: web/package.json web/package-lock.json
 	cd web && $(NPM) ci --no-fund --no-audit
@@ -48,6 +48,17 @@ lint: web-deps
 	cd web && $(NPM) run check
 	cd web && $(NPM) run lint
 	shellcheck scripts/*.sh
+
+
+# End-to-end traffic through every profile with real clients (needs network).
+SINGBOX_VERSION := 1.14.4
+
+.cache/sing-box/sing-box:
+	mkdir -p .cache/sing-box
+	curl -fsSL https://github.com/SagerNet/sing-box/releases/download/v$(SINGBOX_VERSION)/sing-box-$(SINGBOX_VERSION)-linux-amd64.tar.gz | tar -xz -C .cache/sing-box --strip-components=1
+
+e2e: .cache/sing-box/sing-box
+	$(GO) test -count=1 -tags e2e -v -run TestTraffic ./internal/sub/
 
 xray:
 	$(GO) run ./tools/fetchxray -dir .cache/xray

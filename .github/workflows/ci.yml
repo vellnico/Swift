@@ -42,3 +42,13 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: make xray build
       - run: scripts/test-install.sh "${{ matrix.base }}"
+
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make xray
+      - run: make e2e
