@@ -47,7 +47,7 @@ func TestMigrationsApplyAndAreIdempotent(t *testing.T) {
 	}
 	defer s.Close()
 	var n int
-	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil || n != 1 {
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("schema_migrations rows = %d, %v", n, err)
 	}
 }
@@ -80,5 +80,57 @@ func TestSettings(t *testing.T) {
 	all, err := s.Settings(ctx)
 	if err != nil || all["panel_port"] != "2" {
 		t.Fatalf("settings = %v, %v", all, err)
+	}
+}
+
+// 0002 moves untouched REALITY profiles from the chrome fingerprint to firefox.
+func TestRealityFingerprintMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "swift.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := []struct {
+		kind   string
+		manual int
+		params string
+	}{
+		{"vless_reality_vision", 0, `{"fingerprint":"chrome","privateKey":"k"}`},
+		{"vless_reality_xhttp", 0, `{"fingerprint":"chrome","path":"/x"}`},
+		{"vless_reality_vision", 1, `{"fingerprint":"chrome"}`},
+		{"vless_reality_vision", 0, `{"fingerprint":"safari"}`},
+		{"hysteria2", 0, `{"obfsPassword":"p"}`},
+	}
+	for i, r := range rows {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO profiles(name, kind, port, manual, params_json, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0)`,
+			"p"+string(rune('a'+i)), r.kind, 1000+i, r.manual, r.params, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// run 0002 again over the rows above
+	if _, err := s.DB.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version = '0002_reality_fingerprint'`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	want := []string{"firefox", "firefox", "chrome", "safari", ""}
+	for i, w := range want {
+		var fp string
+		if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(json_extract(params_json, '$.fingerprint'), '') FROM profiles WHERE port = ?`, 1000+i).Scan(&fp); err != nil {
+			t.Fatal(err)
+		}
+		if fp != w {
+			t.Errorf("row %d: fingerprint %q, want %q", i, fp, w)
+		}
+	}
+	var path0 string
+	_ = s.DB.QueryRowContext(ctx, `SELECT json_extract(params_json, '$.path') FROM profiles WHERE port = 1001`).Scan(&path0)
+	if path0 != "/x" {
+		t.Fatalf("other params lost: %q", path0)
 	}
 }

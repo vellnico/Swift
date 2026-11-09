@@ -143,10 +143,10 @@ func TestTrafficThroughEveryProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	xhttp := reality("chrome")
+	xhttp := reality(xray.DefaultFingerprint)
 	xhttp.Path, xhttp.Mode = "/e2e", "auto"
 	profiles := []xray.Profile{
-		{ID: 1, Name: "VLESS Reality", Kind: xray.KindVision, Port: freeTCP(t), Enabled: true, Params: reality("chrome"), Position: 1},
+		{ID: 1, Name: "VLESS Reality", Kind: xray.KindVision, Port: freeTCP(t), Enabled: true, Params: reality(xray.DefaultFingerprint), Position: 1},
 		{ID: 2, Name: "VLESS XHTTP", Kind: xray.KindXHTTP, Port: freeTCP(t), Enabled: true, Params: xhttp, Position: 2},
 		{ID: 3, Name: "Hysteria2", Kind: xray.KindHysteria2, Port: freeUDP(t), Enabled: true, Params: xray.Params{ObfsPassword: "e2e-obfs-password"}, Position: 3},
 		{ID: 4, Name: "Hysteria2 plain", Kind: xray.KindHysteria2, Port: freeUDP(t), Enabled: true, Position: 4},

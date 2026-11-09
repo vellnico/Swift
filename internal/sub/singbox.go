@@ -60,7 +60,7 @@ func singBoxOutbound(e links.Endpoint, u xray.User) map[string]any {
 			"tls": map[string]any{
 				"enabled":     true,
 				"server_name": first(p.Params.ServerNames),
-				"utls":        map[string]any{"enabled": true, "fingerprint": orDefault(p.Params.Fingerprint, "chrome")},
+				"utls":        map[string]any{"enabled": true, "fingerprint": orDefault(p.Params.Fingerprint, xray.DefaultFingerprint)},
 				"reality":     map[string]any{"enabled": true, "public_key": p.Params.PublicKey, "short_id": first(p.Params.ShortIDs)},
 			},
 		}

@@ -70,7 +70,7 @@ func Link(e Endpoint, u xray.User) (string, error) {
 
 func fingerprint(p xray.Profile) string {
 	if p.Params.Fingerprint == "" {
-		return "chrome"
+		return xray.DefaultFingerprint
 	}
 	return p.Params.Fingerprint
 }

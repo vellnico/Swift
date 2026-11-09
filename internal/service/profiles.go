@@ -93,7 +93,7 @@ func (s *Profiles) Defaults(ctx context.Context, k xray.Kind) (xray.Params, erro
 		if err != nil {
 			return p, err
 		}
-		p = xray.Params{PrivateKey: priv, PublicKey: pub, ShortIDs: xray.ShortIDs(3), Target: sni + ":443", ServerNames: []string{sni}, Fingerprint: "chrome"}
+		p = xray.Params{PrivateKey: priv, PublicKey: pub, ShortIDs: xray.ShortIDs(3), Target: sni + ":443", ServerNames: []string{sni}, Fingerprint: xray.DefaultFingerprint}
 		if k == xray.KindXHTTP {
 			p.Path, p.Mode = randomPath(), "auto"
 		}

@@ -50,7 +50,7 @@ func xrayOutbound(e links.Endpoint, u xray.User) map[string]any {
 			"security": "reality",
 			"realitySettings": map[string]any{
 				"serverName":  first(p.Params.ServerNames),
-				"fingerprint": orDefault(p.Params.Fingerprint, "chrome"),
+				"fingerprint": orDefault(p.Params.Fingerprint, xray.DefaultFingerprint),
 				"publicKey":   p.Params.PublicKey,
 				"shortId":     first(p.Params.ShortIDs),
 				"spiderX":     "/",

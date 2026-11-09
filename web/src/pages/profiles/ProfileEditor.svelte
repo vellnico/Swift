@@ -40,7 +40,7 @@
       port: p.port,
       serverNames: (pr.serverNames ?? []).join(', '),
       target: pr.target ?? '',
-      fingerprint: pr.fingerprint ?? 'chrome',
+      fingerprint: pr.fingerprint ?? 'firefox',
       shortIds: (pr.shortIds ?? []).join(', '),
       privateKey: pr.privateKey ?? '',
       path: pr.path ?? '',
