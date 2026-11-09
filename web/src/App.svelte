@@ -90,6 +90,9 @@
 
 <style>
   .shell { min-height: 100dvh; }
+  @supports not (height: 100dvh) {
+    .shell { min-height: 100vh; }
+  }
   .shell.desktop { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); }
   .content {
     width: 100%;

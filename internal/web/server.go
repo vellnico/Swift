@@ -42,6 +42,7 @@ type Server struct {
 	Deps
 	api  *http.ServeMux
 	path atomic.Pointer[string]
+	gz   gzipCache
 }
 
 func New(d Deps) *Server {
@@ -133,7 +134,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request, name string) {
 			case strings.HasPrefix(name, "fonts/"):
 				w.Header().Set("Cache-Control", "public, max-age=2592000")
 			}
-			http.ServeFileFS(w, r, s.Assets, name)
+			s.gz.serveFile(w, r, s.Assets, name)
 			return
 		}
 	}

@@ -174,6 +174,10 @@
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
     padding: var(--s2) var(--s5) calc(var(--s6) + env(safe-area-inset-bottom));
   }
+  @supports not (height: 100dvh) {
+    .panel { max-height: calc(100vh - var(--s12)); }
+    .sheet { max-height: 88vh; }
+  }
   .grabber {
     display: grid;
     place-items: center;

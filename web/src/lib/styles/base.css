@@ -19,6 +19,10 @@ body {
   overflow-x: hidden;
 }
 
+@supports not (height: 100dvh) {
+  body { min-height: 100vh; }
+}
+
 /* static grain over the whole app, like matte film */
 body::before {
   content: "";

@@ -1,8 +1,10 @@
 package web
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -247,5 +249,43 @@ func TestExpiredSessionRejected(t *testing.T) {
 	}
 	if code, _ := c.do("POST", "/api/auth/logout", "", true); code != 401 {
 		t.Fatalf("protected route with expired session: %d", code)
+	}
+}
+
+func TestAssetsAreGzipped(t *testing.T) {
+	big := strings.Repeat("console.log('swift');\n", 200)
+	e := newEnv(t)
+	e.srv.Assets = fstest.MapFS{"index.html": {Data: []byte("<title>Swift</title>")}, "assets/app.js": {Data: []byte(big)}, "fonts/a.woff2": {Data: []byte("font")}}
+	h := e.srv.Handler()
+	req := httptest.NewRequest(http.MethodGet, "/abc123/assets/app.js", nil)
+	req.Header.Set("Accept-Encoding", "br, gzip")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Header().Get("Content-Encoding") != "gzip" || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/javascript") || rec.Body.Len() >= len(big)/4 {
+		t.Fatalf("gzip: %v, %d bytes", rec.Header(), rec.Body.Len())
+	}
+	zr, err := gzip.NewReader(rec.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := io.ReadAll(zr); string(body) != big {
+		t.Fatal("gzipped body differs")
+	}
+	if rec := get(t, h, "/abc123/assets/app.js"); rec.Header().Get("Content-Encoding") != "" || rec.Body.String() != big {
+		t.Fatal("plain client got a compressed body")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/abc123/fonts/a.woff2", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Header().Get("Content-Encoding") != "" {
+		t.Fatal("fonts are already compressed")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/abc123/assets/app.js", nil)
+	req.Header.Set("Accept-Encoding", "gzip;q=0")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Header().Get("Content-Encoding") != "" {
+		t.Fatal("q=0 ignored")
 	}
 }

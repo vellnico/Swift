@@ -26,6 +26,8 @@ type SubServer struct {
 	Log    *slog.Logger
 	// HappRouting returns the Happ "routing" header value, empty when not used (SPEC 8).
 	HappRouting func(r *http.Request) string
+
+	gz gzipCache
 }
 
 func (s *SubServer) Handler() http.Handler {
@@ -54,7 +56,7 @@ func (s *SubServer) asset(w http.ResponseWriter, r *http.Request, name string) {
 		return
 	}
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	http.ServeFileFS(w, r, s.Assets, name)
+	s.gz.serveFile(w, r, s.Assets, name)
 }
 
 func (s *SubServer) subscription(w http.ResponseWriter, r *http.Request, token string) {
@@ -195,5 +197,5 @@ func (s *SubServer) page(w http.ResponseWriter, r *http.Request, u store.User, s
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Content-Type-Options", "nosniff")
-	_, _ = w.Write(html)
+	writeBody(w, r, html)
 }

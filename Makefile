@@ -19,7 +19,7 @@ web/node_modules/.package-lock.json: web/package.json web/package-lock.json
 web-deps: web/node_modules/.package-lock.json
 
 web: web-deps
-	cd web && $(NPM) run build
+	cd web && $(NPM) run build && $(NPM) run budget
 	@touch web/dist/.gitkeep web/sub/dist/.gitkeep
 
 go-build:

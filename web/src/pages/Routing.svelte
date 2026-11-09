@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Globe from '@lucide/svelte/icons/globe';
   import Split from '@lucide/svelte/icons/split';
+  import { radioKeys, radioTabIndex } from '../lib/a11y';
   import { api } from '../lib/api';
   import { errorText } from '../lib/errors';
   import { t } from '../lib/i18n/index.svelte';
@@ -44,7 +45,7 @@
 </script>
 
 <Page title={t('nav.routing')}>
-  <div class="options" role="radiogroup" aria-label={t('nav.routing')}>
+  <div class="options" role="radiogroup" aria-label={t('nav.routing')} tabindex="-1" onkeydown={radioKeys}>
     {#if preset === null}
       {#each options as o (o.id)}<Card><Skeleton width="50%" height="22px" /><div class="gap"></div><Skeleton height="14px" /></Card>{/each}
     {:else}
@@ -53,6 +54,7 @@
           type="button"
           role="radio"
           aria-checked={preset === o.id}
+          tabindex={radioTabIndex(preset === o.id)}
           class="option"
           class:active={preset === o.id}
           onclick={() => choose(o.id)}

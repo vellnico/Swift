@@ -78,6 +78,9 @@
     background: var(--surface-1);
     box-shadow: inset -1px 0 0 var(--line);
   }
+  @supports not (height: 100dvh) {
+    .sidebar { height: 100vh; }
+  }
   .brand {
     display: inline-flex;
     align-self: flex-start;

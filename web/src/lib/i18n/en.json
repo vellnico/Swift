@@ -136,7 +136,7 @@
   "users.errors.duplicate": "This name already exists. Add a surname or a detail.",
   "users.errors.invalid": "This name does not fit.",
   "sub.title": "Swift subscription",
-  "sub.for": "Access for {name}",
+  "sub.for": "{name}",
   "sub.disabled": "Access is paused right now. Once it is back on, the subscription updates itself.",
   "sub.copy": "Copy link",
   "sub.copied": "Link copied",

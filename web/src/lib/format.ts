@@ -45,9 +45,11 @@ export function duration(seconds: number, locale: Locale = i18n.locale): string 
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const u = (k: string) => translate(locale, `units.${k}`);
-  if (d > 0) return `${d} ${u('day')} ${h} ${u('hour')}`;
-  if (h > 0) return `${h} ${u('hour')} ${m} ${u('min')}`;
-  return `${Math.max(m, 0)} ${u('min')}`;
+  // a number never wraps away from its unit
+  const nb = ' ';
+  if (d > 0) return `${d}${nb}${u('day')} ${h}${nb}${u('hour')}`;
+  if (h > 0) return `${h}${nb}${u('hour')} ${m}${nb}${u('min')}`;
+  return `${Math.max(m, 0)}${nb}${u('min')}`;
 }
 
 /** Pluralised count: key.one / key.few / key.many / key.other with {n}. */

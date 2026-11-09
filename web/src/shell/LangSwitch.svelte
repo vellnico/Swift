@@ -1,13 +1,15 @@
 <script lang="ts">
+  import { radioKeys, radioTabIndex } from '../lib/a11y';
   import { i18n, locales, setLocale, t } from '../lib/i18n/index.svelte';
 </script>
 
-<div class="lang" role="radiogroup" aria-label={t('lang.label')}>
+<div class="lang" role="radiogroup" aria-label={t('lang.label')} tabindex="-1" onkeydown={radioKeys}>
   {#each locales as l (l)}
     <button
       type="button"
       role="radio"
       aria-checked={i18n.locale === l}
+      tabindex={radioTabIndex(i18n.locale === l)}
       class:active={i18n.locale === l}
       onclick={() => setLocale(l)}
       lang={l}

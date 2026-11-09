@@ -17,9 +17,9 @@ describe('format', () => {
 
   it('percent and duration', () => {
     expect(percent(23.6, 'en')).toBe('24');
-    expect(duration(4 * 86400 + 3 * 3600 + 59, 'ru')).toBe('4 д 3 ч');
-    expect(duration(3 * 3600 + 12 * 60, 'en')).toBe('3 h 12 min');
-    expect(duration(45 * 60, 'en')).toBe('45 min');
+    expect(duration(4 * 86400 + 3 * 3600 + 59, 'ru')).toBe('4 д 3 ч');
+    expect(duration(3 * 3600 + 12 * 60, 'en')).toBe('3 h 12 min');
+    expect(duration(45 * 60, 'en')).toBe('45 min');
   });
 
   it('plurals', () => {

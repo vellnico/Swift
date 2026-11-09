@@ -8,6 +8,7 @@
   import { errorText } from '../lib/errors';
   import { i18n, t } from '../lib/i18n/index.svelte';
   import { dur, fadeShift, reducedMotion } from '../lib/motion';
+  import { radioKeys, radioTabIndex } from '../lib/a11y';
   import { onLive } from '../lib/state.svelte';
   import { eventText, type JournalEvent, type Level } from '../lib/journal';
   import Button from '../lib/ui/Button.svelte';
@@ -73,9 +74,9 @@
 </script>
 
 <Page title={t('nav.log')}>
-  <div class="filter" role="radiogroup" aria-label={t('log.filter')}>
+  <div class="filter" role="radiogroup" aria-label={t('log.filter')} tabindex="-1" onkeydown={radioKeys}>
     {#each levels as l (l)}
-      <button type="button" role="radio" aria-checked={level === l} class:active={level === l} onclick={() => setLevel(l)}>
+      <button type="button" role="radio" aria-checked={level === l} tabindex={radioTabIndex(level === l)} class:active={level === l} onclick={() => setLevel(l)}>
         {t(`log.level.${l || 'all'}`)}
       </button>
     {/each}
