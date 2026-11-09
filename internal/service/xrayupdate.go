@@ -46,6 +46,9 @@ type XrayRelease struct {
 	Major     bool      `json:"major"`
 	Updating  bool      `json:"updating"`
 	Backup    bool      `json:"backup"`
+
+	// BreaksHiddify: releases newer than the pinned one reject REALITY from sing-box clients.
+	BreaksHiddify bool `json:"breaksHiddify"`
 }
 
 var ErrUpdateBusy = errors.New("an xray update is already running")
@@ -106,6 +109,7 @@ func (u *XrayUpdater) Info(ctx context.Context) XrayRelease {
 	if r.Latest != "" {
 		r.Available = xray.CompareVersions(r.Latest, r.Current) > 0
 		r.Major = r.Available && xray.MajorChanged(r.Current, r.Latest)
+		r.BreaksHiddify = r.Available && xray.CompareVersions(r.Latest, xray.Version) > 0
 	}
 	if u.running.TryLock() {
 		u.running.Unlock()

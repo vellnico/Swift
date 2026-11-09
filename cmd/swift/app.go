@@ -67,7 +67,7 @@ func (a *app) startCerts(ctx context.Context) error {
 	if _, err := a.certs.Ensure(ctx); err != nil {
 		return fmt.Errorf("certificate: %w", err)
 	}
-	go a.certs.RunRenewal(ctx, 24*time.Hour)
+	go a.certs.RunRenewal(ctx, 6*time.Hour) // IP certificates live about six days
 	return nil
 }
 
@@ -269,7 +269,7 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request) {
 	if c, err := a.st.Certificate(ctx); err == nil {
 		out["cert"] = c
 	}
-	if info := a.updater.Info(ctx); info.Available {
+	if info := a.updater.Info(ctx); info.Available && !info.BreaksHiddify {
 		out["xrayUpdate"] = info.Latest
 	}
 	web.WriteJSON(w, http.StatusOK, out)

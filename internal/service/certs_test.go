@@ -29,6 +29,9 @@ func (f *fakeIssuer) Obtain(_ context.Context, domain string) (certs.Issued, err
 	}
 	is, err := certs.SelfSigned(domain, nil, f.now)
 	is.NotAfter = f.now.Add(90 * 24 * time.Hour)
+	if net.ParseIP(domain) != nil {
+		is.NotAfter = f.now.Add(160 * time.Hour) // Let's Encrypt shortlived profile
+	}
 	return is, err
 }
 
@@ -169,5 +172,88 @@ func TestIssueACMEValidatesDomain(t *testing.T) {
 		if !errors.As(err, &ve) || ve.Fields["domain"] != code {
 			t.Errorf("%q: want %s, got %v", domain, code, err)
 		}
+	}
+}
+
+// Without a domain the server gets a short-lived Let's Encrypt certificate for its IP.
+func TestIPCertificateLifecycle(t *testing.T) {
+	ctx := context.Background()
+	x, _, _, _ := setup(t)
+	now := time.Unix(1_800_000_000, 0)
+	issuer := &fakeIssuer{now: now, fail: true}
+	var events []string
+	c := &Certs{Store: x.Store, Dir: filepath.Join(t.TempDir(), "certs"), Issuer: issuer, Holder: &certs.Holder{},
+		Now: func() time.Time { return now }, Event: func(_, _, key string, _ map[string]any) { events = append(events, key) }}
+	_ = x.Store.SetSetting(ctx, "server_address", "203.0.113.7")
+	if _, err := c.Ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// Let's Encrypt unreachable: stays self-signed, the same error is journaled once
+	for range 2 {
+		if up, err := c.RenewIfNeeded(ctx, false); err != nil || up {
+			t.Fatalf("failed upgrade: %v %v", up, err)
+		}
+	}
+	if cur, _ := x.Store.Certificate(ctx); cur.Kind != "self_signed" || cur.LastError == "" || len(events) != 1 {
+		t.Fatalf("after failed upgrade: %+v, events %v", cur, events)
+	}
+
+	issuer.fail = false
+	if up, err := c.RenewIfNeeded(ctx, false); err != nil || !up {
+		t.Fatalf("upgrade: %v %v", up, err)
+	}
+	cur, _ := x.Store.Certificate(ctx)
+	if !IsIPCertificate(cur) || cur.Domain != "203.0.113.7" || cur.LastError != "" {
+		t.Fatalf("not an IP certificate: %+v", cur)
+	}
+	if d, _ := x.Store.Setting(ctx, "domain"); d != "" {
+		t.Fatalf("IP mode must not set a domain, got %q", d)
+	}
+
+	// six days of validity: not due on day 1, due with less than 3 days left
+	now = now.Add(24 * time.Hour)
+	if renewed, _ := c.RenewIfNeeded(ctx, false); renewed {
+		t.Fatal("renewed too early")
+	}
+	now = now.Add(3 * 24 * time.Hour)
+	if renewed, err := c.RenewIfNeeded(ctx, false); err != nil || !renewed {
+		t.Fatalf("due renewal: %v %v", renewed, err)
+	}
+
+	// renewal keeps failing until the certificate expires: fall back to self-signed
+	issuer.fail = true
+	now = now.Add(7 * 24 * time.Hour)
+	if _, err := c.RenewIfNeeded(ctx, false); err == nil {
+		t.Fatal("want renewal error")
+	}
+	if cur, _ := x.Store.Certificate(ctx); cur.Kind != "self_signed" {
+		t.Fatalf("expired IP certificate kept: %+v", cur)
+	}
+}
+
+func TestSwitchToIPFallsBackToSelfSigned(t *testing.T) {
+	ctx := context.Background()
+	x, _, _, _ := setup(t)
+	issuer := &fakeIssuer{now: time.Now()}
+	c := &Certs{Store: x.Store, Dir: t.TempDir(), Issuer: issuer, Holder: &certs.Holder{},
+		Resolve: func(context.Context, string) ([]string, error) { return []string{"203.0.113.7"}, nil }}
+	_ = x.Store.SetSetting(ctx, "server_address", "203.0.113.7")
+	if _, err := c.IssueACME(ctx, "vpn.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	issuer.fail = true
+	cur, err := c.SwitchToIP(ctx)
+	if err != nil || cur.Kind != "self_signed" || !strings.Contains(cur.LastError, "timeout") {
+		t.Fatalf("fallback: %+v %v", cur, err)
+	}
+	issuer.fail = false
+	if cur, err := c.SwitchToIP(ctx); err != nil || !IsIPCertificate(cur) {
+		t.Fatalf("switch: %+v %v", cur, err)
+	}
+	// a private address cannot be validated by Let's Encrypt
+	_ = x.Store.SetSetting(ctx, "server_address", "10.0.0.5")
+	if _, err := c.IssueIP(ctx); err == nil {
+		t.Fatal("private address accepted")
 	}
 }

@@ -70,6 +70,9 @@ func adminShow(ctx context.Context, cfg config.Config, st *store.Store, w io.Wri
 	}
 	fmt.Fprintf(w, "URL:   %s\nLogin: %s\n", url, a.Username)
 	fmt.Fprintf(w, "Language: %s\n", service.Language(ctx, st))
+	if c, err := st.Certificate(ctx); err == nil {
+		fmt.Fprintf(w, "Certificate: %s\n", c.Kind)
+	}
 	return nil
 }
 

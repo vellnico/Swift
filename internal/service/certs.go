@@ -30,7 +30,10 @@ type Certs struct {
 	Resolve func(ctx context.Context, host string) ([]string, error)
 }
 
-const RenewBefore = 30 * 24 * time.Hour
+const (
+	RenewBefore   = 30 * 24 * time.Hour
+	RenewBeforeIP = 3 * 24 * time.Hour
+)
 
 func (c *Certs) now() time.Time {
 	if c.Now != nil {
@@ -95,6 +98,82 @@ func (c *Certs) selfSigned(ctx context.Context) (store.Certificate, error) {
 		return store.Certificate{}, err
 	}
 	return c.install(ctx, "self_signed", is.CN, is)
+}
+
+// publicAddress returns the server address when Let's Encrypt can validate it.
+func (c *Certs) publicAddress(ctx context.Context) (string, bool) {
+	v, err := c.Store.Setting(ctx, "server_address")
+	if err != nil {
+		return "", false
+	}
+	ip := net.ParseIP(v)
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() {
+		return "", false
+	}
+	return ip.String(), true
+}
+
+// IssueIP gets a short-lived Let's Encrypt certificate for the server's public IP
+// (IP mode without browser warnings) and reloads xray.
+func (c *Certs) IssueIP(ctx context.Context) (store.Certificate, error) {
+	addr, ok := c.publicAddress(ctx)
+	if !ok {
+		return store.Certificate{}, &ValidationError{Fields: map[string]string{"address": "invalid"}}
+	}
+	if c.Issuer == nil {
+		return store.Certificate{}, errors.New("no ACME issuer configured")
+	}
+	is, err := c.Issuer.Obtain(ctx, addr)
+	if err != nil {
+		c.event("error", "certs.acme_failed", map[string]any{"domain": addr, "error": err.Error()})
+		return store.Certificate{}, &IssueError{Detail: err.Error()}
+	}
+	saved, err := c.install(ctx, "acme", addr, is)
+	if err != nil {
+		return saved, err
+	}
+	if err := c.Store.SetSetting(ctx, "domain", ""); err != nil {
+		return saved, err
+	}
+	c.event("info", "certs.issued", map[string]any{"domain": addr})
+	return saved, c.apply(ctx)
+}
+
+// SwitchToIP moves to IP mode: a Let's Encrypt certificate for the IP when it
+// can be issued, otherwise a self-signed one that records why.
+func (c *Certs) SwitchToIP(ctx context.Context) (store.Certificate, error) {
+	saved, err := c.IssueIP(ctx)
+	if err == nil {
+		return saved, nil
+	}
+	var ie *IssueError
+	var ve *ValidationError
+	if !errors.As(err, &ie) && !errors.As(err, &ve) {
+		return saved, err
+	}
+	saved, serr := c.IssueSelfSigned(ctx)
+	if serr != nil {
+		return saved, serr
+	}
+	if ie != nil {
+		_ = c.Store.SetCertificateError(ctx, ie.Detail)
+		saved.LastError = ie.Detail
+	}
+	return saved, nil
+}
+
+// IsIPCertificate reports whether a Let's Encrypt certificate covers an IP address.
+func IsIPCertificate(cur store.Certificate) bool {
+	return cur.Kind == "acme" && net.ParseIP(cur.Domain) != nil
+}
+
+// renewBefore is how long before expiry a certificate is renewed: IP
+// certificates live about six days, domain certificates 90.
+func renewBefore(cur store.Certificate) time.Duration {
+	if IsIPCertificate(cur) {
+		return RenewBeforeIP
+	}
+	return RenewBefore
 }
 
 // IssueSelfSigned switches to a new self-signed certificate (IP mode) and reloads xray.
@@ -172,23 +251,36 @@ func (c *Certs) checkDNS(ctx context.Context, domain string) error {
 	return nil
 }
 
-// RenewIfNeeded renews an ACME certificate that expires within 30 days (or always
-// when force), reloads the panel's certificate in place and restarts xray.
+// RenewIfNeeded renews an ACME certificate that expires soon (30 days for a
+// domain, 3 for an IP; always when force), reloads the panel's certificate in
+// place and restarts xray. A self-signed certificate on a public IP is replaced
+// by a Let's Encrypt one as soon as it can be issued.
 func (c *Certs) RenewIfNeeded(ctx context.Context, force bool) (bool, error) {
 	cur, err := c.Store.Certificate(ctx)
 	if err != nil {
 		return false, err
 	}
+	if cur.Kind == "self_signed" {
+		return c.upgradeSelfSigned(ctx)
+	}
 	if cur.Kind != "acme" {
 		return false, nil
 	}
-	if !force && cur.NotAfter.Sub(c.now()) > RenewBefore {
+	if !force && cur.NotAfter.Sub(c.now()) > renewBefore(cur) {
 		return false, nil
 	}
 	is, err := c.Issuer.Obtain(ctx, cur.Domain)
 	if err != nil {
 		_ = c.Store.SetCertificateError(ctx, err.Error())
 		c.event("error", "certs.renew_failed", map[string]any{"domain": cur.Domain, "error": err.Error()})
+		if IsIPCertificate(cur) && !c.now().Before(cur.NotAfter) {
+			// an expired IP certificate breaks Hysteria2 and the panel; a self-signed one keeps
+			// them usable until the next attempt succeeds
+			if _, serr := c.selfSigned(ctx); serr == nil {
+				_ = c.Store.SetCertificateError(ctx, err.Error())
+				_ = c.apply(ctx)
+			}
+		}
 		return false, &IssueError{Detail: err.Error()}
 	}
 	if _, err := c.install(ctx, "acme", cur.Domain, is); err != nil {
@@ -198,7 +290,30 @@ func (c *Certs) RenewIfNeeded(ctx context.Context, force bool) (bool, error) {
 	return true, c.apply(ctx)
 }
 
-// RunRenewal checks the certificate once a day until ctx ends.
+// upgradeSelfSigned tries the IP certificate; a failure stays on the
+// self-signed certificate and is shown once per distinct error.
+func (c *Certs) upgradeSelfSigned(ctx context.Context) (bool, error) {
+	addr, ok := c.publicAddress(ctx)
+	if !ok || c.Issuer == nil {
+		return false, nil
+	}
+	is, err := c.Issuer.Obtain(ctx, addr)
+	if err != nil {
+		cur, _ := c.Store.Certificate(ctx)
+		if cur.LastError != err.Error() {
+			_ = c.Store.SetCertificateError(ctx, err.Error())
+			c.event("warn", "certs.acme_failed", map[string]any{"domain": addr, "error": err.Error()})
+		}
+		return false, nil
+	}
+	if _, err := c.install(ctx, "acme", addr, is); err != nil {
+		return false, err
+	}
+	c.event("info", "certs.issued", map[string]any{"domain": addr})
+	return true, c.apply(ctx)
+}
+
+// RunRenewal checks the certificate periodically until ctx ends.
 func (c *Certs) RunRenewal(ctx context.Context, every time.Duration) {
 	t := time.NewTicker(every)
 	defer t.Stop()

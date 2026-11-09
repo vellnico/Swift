@@ -25,8 +25,6 @@ PURGE=0
 FROM_DIR=""
 TMP=""
 TAG=""
-XRAY_VER=""
-XRAY_PINNED=""
 
 # Character counts below must be in characters, not bytes.
 if locale -a 2>/dev/null | grep -qiE '^c\.utf-?8$'; then export LC_ALL=C.UTF-8; fi
@@ -341,57 +339,24 @@ download_swift() {
 	tar -xzf "$TMP/$file" -C "$TMP" swift
 }
 
-# latest_xray prints the newest stable Xray-core version (no "v"), or nothing.
-latest_xray() {
-	local tag
-	tag="$(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/XTLS/Xray-core/releases/latest || true)"
-	tag="${tag##*/v}"
-	case "$tag" in [0-9]*.[0-9]*) printf '%s' "$tag" ;; esac
-}
-
-# xray_zip downloads and verifies Xray $1 into $TMP/xray/; it returns 1 instead of dying.
-xray_zip() {
-	local ver=$1 zip="Xray-linux-${XRAY_ARCH}.zip" want got
-	local base="https://github.com/XTLS/Xray-core/releases/download/v$ver"
-	curl -fsSL --retry 5 --retry-delay 3 -o "$TMP/$zip" "$base/$zip" || return 1
-	curl -fsSL --retry 5 --retry-delay 3 -o "$TMP/$zip.dgst" "$base/$zip.dgst" || return 1
-	want="$(sed -n 's/^SHA2-256= *//p' "$TMP/$zip.dgst" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
-	got="$(sha256sum "$TMP/$zip" | cut -d' ' -f1)"
-	if [ -z "$want" ] || [ "$want" != "$got" ]; then
-		printf 'xray %s: checksum mismatch\n' "$ver"
-		return 1
-	fi
-	rm -rf "$TMP/xray"
-	mkdir -p "$TMP/xray"
-	unzip -oq "$TMP/$zip" xray geoip.dat geosite.dat -d "$TMP/xray" || return 1
-	XRAY_VER=$ver
-}
-
-# download_xray leaves xray and geo files in $TMP/xray/: the latest stable
-# release, or the version Swift was tested with when the latest is unavailable.
+# download_xray leaves xray and geo files in $TMP/xray/, pinned to Swift's version.
 download_xray() {
 	mkdir -p "$TMP/xray"
 	if [ -n "$FROM_DIR" ]; then
 		cp "$FROM_DIR/xray/xray" "$FROM_DIR/xray/geoip.dat" "$FROM_DIR/xray/geosite.dat" "$TMP/xray/"
 		return
 	fi
-	local latest
-	XRAY_PINNED="$("$TMP/swift" version --xray)"
-	latest="$(latest_xray)"
-	if [ -n "$latest" ] && [ "$latest" != "$XRAY_PINNED" ]; then
-		if xray_zip "$latest"; then return 0; fi
-		printf 'xray %s unavailable, using %s\n' "$latest" "$XRAY_PINNED"
+	local ver zip want got
+	ver="$("$TMP/swift" version --xray)"
+	zip="Xray-linux-${XRAY_ARCH}.zip"
+	fetch "https://github.com/XTLS/Xray-core/releases/download/v$ver/$zip" "$TMP/$zip"
+	fetch "https://github.com/XTLS/Xray-core/releases/download/v$ver/$zip.dgst" "$TMP/$zip.dgst"
+	want="$(sed -n 's/^SHA2-256= *//p' "$TMP/$zip.dgst" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
+	got="$(sha256sum "$TMP/$zip" | cut -d' ' -f1)"
+	if [ -z "$want" ] || [ "$want" != "$got" ]; then
+		die "$(L "Xray checksum mismatch" "Контрольная сумма Xray не совпала")" "$(L "The download is corrupted. Run the installer again." "Файл повреждён при загрузке. Запустите установку снова.")"
 	fi
-	xray_zip "$XRAY_PINNED" ||
-		die "$(L "Could not download Xray $XRAY_PINNED" "Не удалось скачать Xray $XRAY_PINNED")" "$(L "Make sure the server can reach github.com and run the installer again." "Проверьте, что сервер видит github.com, и запустите установку снова.")"
-}
-
-# pinned_xray replaces a newer Xray that rejected the config with the tested one.
-pinned_xray() {
-	if [ -z "$XRAY_PINNED" ] || [ "$XRAY_VER" = "$XRAY_PINNED" ]; then return 1; fi
-	printf 'xray %s rejected the config, installing %s\n' "$XRAY_VER" "$XRAY_PINNED"
-	xray_zip "$XRAY_PINNED" || return 1
-	install_binaries
+	unzip -oq "$TMP/$zip" xray geoip.dat geosite.dat -d "$TMP/xray"
 }
 
 install_binaries() {
@@ -459,6 +424,15 @@ enable_bbr() {
 	modprobe tcp_bbr || true
 	printf 'net.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr\n' >"$SYSCTL"
 	sysctl --system || printf 'could not apply BBR settings\n'
+}
+
+# open_http lets Let's Encrypt reach port 80 before swift setup requests the certificate.
+open_http() {
+	if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+		ufw allow 80/tcp
+	elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+		firewall-cmd --add-port=80/tcp
+	fi
 }
 
 open_ports() {
@@ -537,21 +511,15 @@ do_install() {
 	if [ -f "$UNIT" ]; then systemctl stop swift || true; fi
 	install_binaries
 	write_config
-	if [ -n "$DOMAIN" ]; then
-		step 64 "$(L "Profiles and a Let's Encrypt certificate" "Профили и сертификат Let's Encrypt")"
-	else
-		step 64 "$(L "Profiles and certificate" "Профили и сертификат")"
-	fi
+	step 64 "$(L "Profiles and a Let's Encrypt certificate" "Профили и сертификат Let's Encrypt")"
+	open_http
 	local args=(-config "$ETC/swift.toml" -address "$ADDRESS")
 	# releases before v0.2.0 (--version) have no -lang; -h exits non-zero
 	local help
 	help="$("$BIN" setup -h 2>&1 || true)"
 	case "$help" in *-lang*) args+=(-lang "$UI_LANG") ;; esac
 	if [ -n "$DOMAIN" ]; then args+=(-domain "$DOMAIN"); fi
-	if ! "$BIN" setup "${args[@]}"; then
-		pinned_xray
-		"$BIN" setup "${args[@]}"
-	fi
+	"$BIN" setup "${args[@]}"
 	step 84 "$(L "Network settings" "Настройка сети")"
 	enable_bbr
 	write_unit
@@ -582,8 +550,10 @@ do_install() {
 		ui "  $(L "The password is unchanged; data and profiles are kept." "Пароль прежний, данные и профили сохранены.")"
 		ui "  ${D}$(L "swift admin reset issues a new one." "Новый пароль выдаст команда swift admin reset.")${R}"
 	fi
-	if [ -z "$DOMAIN" ]; then
-		ui "  ${D}$(L "The browser will warn about a self-signed certificate: this is expected." "Браузер предупредит о самоподписанном сертификате: это ожидаемо.")${R}"
+	if "$BIN" admin show -config "$ETC/swift.toml" | grep -q '^Certificate: self_signed$'; then
+		ui ""
+		ui "  $(L "Let's Encrypt could not issue a certificate, so the browser will warn about a self-signed one." "Let's Encrypt не выдал сертификат, поэтому браузер предупредит о самоподписанном.")"
+		ui "  ${D}$(L "Open port 80 in the host's firewall: the panel retries every 6 hours." "Откройте порт 80 в файрволе хостера: панель повторяет попытку каждые 6 часов.")${R}"
 	fi
 	ui ""
 	ui "  $(L "If your host has its own firewall, open these ports there:" "Если у хостера есть свой файрвол, откройте в нём порты:")"
@@ -611,9 +581,6 @@ do_update() {
 	step 75 "$(L "Installing files" "Установка файлов")"
 	systemctl stop swift
 	install_binaries
-	if [ -f "$DATA/xray/config.json" ] && ! "$LIB/xray" run -test -c "$DATA/xray/config.json"; then
-		pinned_xray
-	fi
 	write_unit
 	step 90 "$(L "Starting the panel" "Запуск панели")"
 	start_service

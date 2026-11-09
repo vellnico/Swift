@@ -9,7 +9,7 @@ A lightweight web panel for a single VPN server running [Xray-core](https://gith
 - **Protocols:** VLESS Reality (TCP + Vision and XHTTP) and Hysteria2 with Salamander obfuscation. A profile is one click away: keys, port and Reality target are picked for you.
 - **People and subscriptions:** everyone gets their own subscription link and QR code. The subscription adapts to the app — Hiddify, Happ, v2rayNG, v2RayTun. Adding and disabling people never restarts Xray.
 - **Russian sites direct:** one switch, and the rules reach the apps through the subscription.
-- **Certificates:** self-signed right after install, or Let's Encrypt for your own domain with automatic renewal.
+- **Certificates:** Let's Encrypt right after install, for your domain or, without one, for the server IP (a self-signed one only if Let's Encrypt cannot reach port 80); renewal is automatic.
 - **Live overview:** CPU, memory and network without polling, Xray status, event journal.
 - **Xray updates from the panel:** SHA256 check, config check with the new version and an automatic rollback if the core does not come up.
 - **One binary:** Go without CGO, SQLite inside, the UI embedded. About 20 MB of memory.
@@ -41,7 +41,7 @@ Running the installer again breaks nothing: the password, ports and profiles sta
 
 ## Usage
 
-1. Open the panel address from the installer's final box. The browser warns about the self-signed certificate — that is expected; issue a certificate for a domain in Settings to get rid of the warning.
+1. Open the panel address from the installer's final box. If the installer said Let's Encrypt could not issue a certificate, the browser warns about a self-signed one: open port 80 in your host's firewall and the panel will get a certificate within 6 hours.
 2. In People, add a person: a QR code and a subscription link appear.
 3. The person opens the link on their phone — the subscription page offers to add it to Hiddify, Happ or v2rayNG with one tap.
 

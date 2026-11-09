@@ -38,7 +38,7 @@ func TestSetupIsIdempotentAndBackupWorks(t *testing.T) {
 	t.Setenv("SWIFT_XRAY_BIN", bin)
 	var out bytes.Buffer
 	// no default profiles: they probe Reality targets over the network
-	if err := run([]string{"setup", "-config", "", "-address", "203.0.113.7", "-no-profiles"}, &out, &out); err != nil {
+	if err := run([]string{"setup", "-config", "", "-address", "203.0.113.7", "-no-profiles", "-no-ip-cert"}, &out, &out); err != nil {
 		t.Fatalf("setup: %v\n%s", err, out.String())
 	}
 	out.Reset()

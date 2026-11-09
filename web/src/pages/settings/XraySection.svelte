@@ -19,6 +19,7 @@
     checkedAt: string;
     available: boolean;
     major: boolean;
+    breaksHiddify: boolean;
     updating: boolean;
     backup: boolean;
   }
@@ -101,6 +102,9 @@
       <p class="t-small muted">{checked}</p>
       {#if rel.available && rel.major}
         <Alert kind="warning">{t('settings.xray_major', { current: rel.current })}</Alert>
+      {/if}
+      {#if rel.breaksHiddify}
+        <Alert kind="warning">{t('settings.xray_breaks_hiddify', { pinned: rel.pinned })}</Alert>
       {/if}
       {#if error}<Alert>{error}</Alert>{/if}
       {#if stage}

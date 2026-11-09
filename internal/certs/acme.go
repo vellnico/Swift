@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -21,7 +22,11 @@ import (
 	"github.com/go-acme/lego/v4/registration"
 )
 
-// Issuer obtains a publicly trusted certificate for a domain.
+// ShortLivedProfile is the Let's Encrypt profile IP address certificates require
+// (about six days of validity).
+const ShortLivedProfile = "shortlived"
+
+// Issuer obtains a publicly trusted certificate for a domain or a public IP address.
 type Issuer interface {
 	Obtain(ctx context.Context, domain string) (Issued, error)
 }
@@ -73,9 +78,11 @@ func (l *LegoIssuer) accountKey() (crypto.PrivateKey, error) {
 	return key, nil
 }
 
-func (l *LegoIssuer) client(user *acmeUser) (*lego.Client, error) {
+func (l *LegoIssuer) client(user *acmeUser, ip bool) (*lego.Client, error) {
 	cfg := lego.NewConfig(user)
 	cfg.Certificate.KeyType = certcrypto.EC256
+	// IP certificates carry the address only as a SAN
+	cfg.Certificate.DisableCommonName = ip
 	if l.Staging {
 		cfg.CADirURL = lego.LEDirectoryStaging
 	}
@@ -87,6 +94,7 @@ func (l *LegoIssuer) client(user *acmeUser) (*lego.Client, error) {
 }
 
 func (l *LegoIssuer) Obtain(ctx context.Context, domain string) (Issued, error) {
+	ip := net.ParseIP(domain)
 	key, err := l.accountKey()
 	if err != nil {
 		return Issued{}, fmt.Errorf("acme account key: %w", err)
@@ -101,7 +109,7 @@ func (l *LegoIssuer) Obtain(ctx context.Context, domain string) (Issued, error) 
 	}
 
 	attempt := func(setup func(*lego.Client) error) (Issued, error) {
-		c, err := l.client(user)
+		c, err := l.client(user, ip != nil)
 		if err != nil {
 			return Issued{}, err
 		}
@@ -115,7 +123,11 @@ func (l *LegoIssuer) Obtain(ctx context.Context, domain string) (Issued, error) 
 			}
 			user.reg = reg
 		}
-		res, err := c.Certificate.Obtain(certificate.ObtainRequest{Domains: []string{domain}, Bundle: true})
+		req := certificate.ObtainRequest{Domains: []string{domain}, Bundle: true}
+		if ip != nil {
+			req.Profile = ShortLivedProfile
+		}
+		res, err := c.Certificate.Obtain(req)
 		if err != nil {
 			return Issued{}, err
 		}

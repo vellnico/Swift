@@ -61,9 +61,6 @@ ct bash -c 'source /opt/install.sh; check_system; [ "$SWIFT_VERSION" = latest ]'
 # shellcheck disable=SC2016
 ct bash -c 'source /opt/install.sh; release_tag; case "$TAG" in v[0-9]*) ;; *) exit 1 ;; esac' || fail "latest release tag not resolved"
 
-# shellcheck disable=SC2016
-ct bash -c 'source /opt/install.sh; TMP="$(mktemp -d)"; XRAY_ARCH=64; v="$(latest_xray)"; [ -n "$v" ] && xray_zip "$v" && "$TMP/xray/xray" version | grep -q "Xray $v "' >/dev/null || fail "latest Xray not downloaded"
-
 echo "== clean install on $BASE"
 out="$(run_installer)" || fail "install exited with an error: $out"
 printf '%s\n' "$out"

@@ -33,6 +33,9 @@
     api<Cert>('certs').then((c) => (cert = c)).catch((e) => toast(errorText(e)));
   });
 
+  // a Let's Encrypt certificate for the server IP (no domain)
+  const isIP = $derived(!!cert && cert.kind === 'acme' && (cert.domain.includes(':') || /^d+.d+.d+.d+$/.test(cert.domain)));
+
   const expires = $derived(cert ? new Date(cert.notAfter).toLocaleDateString(i18n.locale === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
   function errorFor(e: unknown): string {
@@ -64,9 +67,11 @@
     try {
       cert = mode === 'domain'
         ? await api<Cert>('certs/acme', { method: 'POST', body: { domain: domain.trim() } })
-        : await api<Cert>('certs/self-signed', { method: 'POST' });
+        : await api<Cert>('certs/ip', { method: 'POST' });
       status = 'done';
-      toast(mode === 'domain' ? t('certs.issued') : t('certs.switched_ip'));
+      if (mode === 'domain') toast(t('certs.issued'));
+      else if (cert.kind === 'self_signed') toast(t('certs.ip_failed', { detail: cert.lastError }));
+      else toast(t('certs.switched_ip'));
       domain = '';
       setTimeout(() => (status = 'idle'), 1600);
     } catch (e) {
@@ -102,7 +107,7 @@
     <div class="stack">
       {#if cert.lastError}<Alert kind="warning">{t('dash.cert_error', { error: cert.lastError })}</Alert>{/if}
       <dl class="facts">
-        <dt class="t-small muted">{cert.kind === 'acme' ? t('certs.domain') : t('certs.name')}</dt>
+        <dt class="t-small muted">{isIP ? t('certs.ip') : cert.kind === 'acme' ? t('certs.domain') : t('certs.name')}</dt>
         <dd class="t-code">{cert.domain}</dd>
         <dt class="t-small muted">{t('certs.valid_until')}</dt>
         <dd>{expires}</dd>
@@ -110,16 +115,23 @@
       {#if cert.kind === 'self_signed'}
         <CopyField label={t('certs.fingerprint')} value={cert.sha256} />
         <p class="t-small muted note">{t('certs.self_signed_note')}</p>
+        <div><Button variant="secondary" status={status} onclick={() => ask('ip')}>{t('certs.get_ip')}</Button></div>
         <form class="issue" onsubmit={(e) => (e.preventDefault(), ask('domain'))} novalidate>
           <Input label={t('certs.domain_label')} hint={t('certs.domain_hint')} placeholder="vpn.example.com" bind:value={domain} mono autocomplete="off" spellcheck="false" error={domainError || undefined} />
           <div><Button type="submit" variant="secondary" status={status}>{t('certs.issue')}</Button></div>
         </form>
       {:else}
-        <p class="t-small muted note">{t('certs.acme_note')}</p>
+        <p class="t-small muted note">{isIP ? t('certs.ip_note') : t('certs.acme_note')}</p>
         <div class="actions">
           <Button variant="secondary" status={renewing} onclick={renew}>{t('certs.renew')}</Button>
-          <Button variant="quiet" status={status} onclick={() => ask('ip')}>{t('certs.to_ip')}</Button>
+          {#if !isIP}<Button variant="quiet" status={status} onclick={() => ask('ip')}>{t('certs.to_ip')}</Button>{/if}
         </div>
+        {#if isIP}
+          <form class="issue" onsubmit={(e) => (e.preventDefault(), ask('domain'))} novalidate>
+            <Input label={t('certs.domain_label')} hint={t('certs.domain_hint')} placeholder="vpn.example.com" bind:value={domain} mono autocomplete="off" spellcheck="false" error={domainError || undefined} />
+            <div><Button type="submit" variant="secondary" status={status}>{t('certs.issue')}</Button></div>
+          </form>
+        {/if}
       {/if}
     </div>
   {/if}

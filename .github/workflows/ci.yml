@@ -48,8 +48,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        xray: ["", "26.9.9", "26.7.28", "26.7.11"]
+        xray: ["", "26.11.9"]
     name: e2e (xray ${{ matrix.xray || 'pinned' }})
+    # newer Xray releases reject sing-box REALITY clients (SagerNet/sing-box#4520); kept as a canary
+    continue-on-error: ${{ matrix.xray != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

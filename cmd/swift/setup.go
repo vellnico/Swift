@@ -26,6 +26,7 @@ func setup(args []string, stdout io.Writer) error {
 	domain := fs.String("domain", "", "domain pointing at the server (Let's Encrypt)")
 	noProfiles := fs.Bool("no-profiles", false, "do not create the default profiles")
 	lang := fs.String("lang", "", "default panel language: en or ru")
+	noIPCert := fs.Bool("no-ip-cert", false, "do not request a Let's Encrypt certificate for the IP")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -71,10 +72,19 @@ func setup(args []string, stdout io.Writer) error {
 	c := &service.Certs{Store: st, Dir: certDir, Issuer: &certs.LegoIssuer{Dir: certDir, Email: cfg.ACMEEmail, Staging: cfg.ACMEStaging}}
 	x.Certs = c.Files
 
+	trusted := false
 	if *domain != "" {
 		fmt.Fprintf(stdout, "Requesting a Let's Encrypt certificate for %s...\n", *domain)
 		if _, err := c.IssueACME(ctx, *domain); err != nil {
-			fmt.Fprintf(stdout, "Could not get a certificate (%v); using a self-signed one. Retry later in Settings.\n", err)
+			fmt.Fprintf(stdout, "Could not get a certificate for the domain: %v\n", err)
+		} else {
+			trusted = true
+		}
+	}
+	if !trusted && *address != "" && !*noIPCert {
+		fmt.Fprintf(stdout, "Requesting a Let's Encrypt certificate for %s...\n", *address)
+		if _, err := c.IssueIP(ctx); err != nil {
+			fmt.Fprintf(stdout, "Could not get a certificate for the IP (%v); using a self-signed one, the panel retries every 6 hours.\n", err)
 		}
 	}
 	if _, err := c.Ensure(ctx); err != nil {
@@ -128,9 +138,8 @@ func ports(args []string, stdout io.Writer) error {
 		v, _ := st.Setting(ctx, key)
 		emit("tcp", v)
 	}
-	if d, _ := st.Setting(ctx, "domain"); d != "" {
-		emit("tcp", "80") // ACME HTTP-01 renewals
-	}
+	// Let's Encrypt HTTP-01 for the domain or IP certificate and its renewals
+	emit("tcp", "80")
 	ps, err := st.Profiles(ctx)
 	if err != nil {
 		return err

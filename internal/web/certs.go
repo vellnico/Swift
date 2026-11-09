@@ -16,6 +16,7 @@ func (s *Server) registerCerts() {
 	s.Handle("GET /api/certs", s.getCert)
 	s.Handle("POST /api/certs/acme", s.issueACME)
 	s.Handle("POST /api/certs/self-signed", s.issueSelfSigned)
+	s.Handle("POST /api/certs/ip", s.switchToIP)
 	s.Handle("POST /api/certs/renew", s.renewCert)
 }
 
@@ -67,6 +68,16 @@ func (s *Server) issueACME(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) issueSelfSigned(w http.ResponseWriter, r *http.Request) {
 	c, err := s.Certs.IssueSelfSigned(r.Context())
+	if err != nil {
+		s.certError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, certView(c))
+}
+
+// switchToIP answers with a self-signed certificate and its lastError when Let's Encrypt refused.
+func (s *Server) switchToIP(w http.ResponseWriter, r *http.Request) {
+	c, err := s.Certs.SwitchToIP(r.Context())
 	if err != nil {
 		s.certError(w, err)
 		return
