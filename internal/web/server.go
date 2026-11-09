@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync/atomic"
 
 	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/bus"
@@ -29,13 +30,18 @@ type Deps struct {
 	Users     *service.Users
 	Subs      *service.Subscriptions
 	Certs     *service.Certs
+	Panel     *service.Panel
+	Updater   *service.XrayUpdater
+	// PanelPort returns the port the panel listens on now.
+	PanelPort func() int
 	// OnEvent is called after a journal entry is written (used to push it over SSE).
 	OnEvent func(store.Event)
 }
 
 type Server struct {
 	Deps
-	api *http.ServeMux
+	api  *http.ServeMux
+	path atomic.Pointer[string]
 }
 
 func New(d Deps) *Server {
@@ -47,15 +53,18 @@ func New(d Deps) *Server {
 		d.Limiter = auth.NewLimiter()
 	}
 	s := &Server{Deps: d, api: http.NewServeMux()}
+	s.SetPanelPath(d.PanelPath)
 	s.api.HandleFunc("GET /api/health", s.health)
 	s.api.HandleFunc("GET /api/auth/session", s.session)
 	s.api.HandleFunc("POST /api/auth/login", s.login)
 	s.Handle("POST /api/auth/logout", s.logout)
 	s.Handle("POST /api/auth/password", s.changePassword)
 	s.Handle("GET /api/events", s.events)
+	s.Handle("GET /api/journal", s.journal)
 	s.registerProfiles()
 	s.registerUsers()
 	s.registerCerts()
+	s.registerSettings()
 	if d.Store != nil {
 		s.registerRouting()
 	}
@@ -67,11 +76,19 @@ func (s *Server) Handle(pattern string, h http.HandlerFunc) {
 	s.api.Handle(pattern, s.requireSession(h))
 }
 
-func (s *Server) cookiePath() string { return "/" + s.PanelPath + "/" }
+// SetPanelPath moves the panel to a new secret path while serving.
+func (s *Server) SetPanelPath(p string) {
+	p = strings.Trim(p, "/")
+	s.path.Store(&p)
+}
+
+func (s *Server) panelPath() string { return *s.path.Load() }
+
+func (s *Server) cookiePath() string { return "/" + s.panelPath() + "/" }
 
 func (s *Server) Handler() http.Handler {
-	prefix := "/" + s.PanelPath
 	return securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		prefix := "/" + s.panelPath()
 		if r.URL.Path == prefix {
 			http.Redirect(w, r, prefix+"/", http.StatusMovedPermanently)
 			return

@@ -192,8 +192,10 @@ func (x *Xray) apply(ctx context.Context, force bool) error {
 	return nil
 }
 
-func (x *Xray) restartAndWait(ctx context.Context) error {
-	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+func (x *Xray) restartAndWait(ctx context.Context) error { return x.restartWithin(ctx, 10*time.Second) }
+
+func (x *Xray) restartWithin(ctx context.Context, d time.Duration) error {
+	rctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
 	if err := x.Sup.Restart(rctx); err != nil {
 		return err

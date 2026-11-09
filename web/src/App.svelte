@@ -4,7 +4,7 @@
   import './lib/styles/base.css';
   import { onMount } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { i18n, t } from './lib/i18n/index.svelte';
+  import { i18n } from './lib/i18n/index.svelte';
   import { navigate, router } from './lib/router.svelte';
   import { dur, fadeShift, section } from './lib/motion';
   import { checkSession, session } from './lib/session.svelte';
@@ -14,13 +14,13 @@
   import BottomNav from './shell/BottomNav.svelte';
   import LogoFlight from './shell/LogoFlight.svelte';
   import Login from './pages/Login.svelte';
-  import Placeholder from './pages/Placeholder.svelte';
   import More from './pages/More.svelte';
   import Profiles from './pages/Profiles.svelte';
   import Users from './pages/Users.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import Settings from './pages/Settings.svelte';
   import Routing from './pages/Routing.svelte';
+  import Log from './pages/Log.svelte';
   import { onGlobalKey } from './lib/hotkeys';
   import NotFound from './pages/NotFound.svelte';
 
@@ -46,15 +46,6 @@
     navigate('/');
     session.status = 'authed';
   }
-
-  const titles: Record<string, string> = {
-    dashboard: 'nav.dashboard',
-    profiles: 'nav.profiles',
-    users: 'nav.users',
-    routing: 'nav.routing',
-    settings: 'nav.settings',
-    log: 'nav.log',
-  };
 </script>
 
 <svelte:window onkeydown={(e) => session.status === 'authed' && onGlobalKey(e)} />
@@ -81,10 +72,10 @@
             <Settings />
           {:else if route.name === 'routing'}
             <Routing />
-          {:else if route.name === 'notfound'}
-            <NotFound />
+          {:else if route.name === 'log'}
+            <Log />
           {:else}
-            <Placeholder title={t(titles[route.name] ?? 'nav.dashboard')} />
+            <NotFound />
           {/if}
         </div>
       {/key}

@@ -4,7 +4,6 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -32,22 +31,8 @@ func main() {
 	}
 }
 
-func assetName(goos, goarch string) (string, error) {
-	arch := map[string]string{"amd64": "64", "arm64": "arm64-v8a", "386": "32"}[goarch]
-	if arch == "" {
-		return "", fmt.Errorf("unsupported arch %s", goarch)
-	}
-	switch goos {
-	case "linux", "windows", "freebsd", "openbsd":
-		return fmt.Sprintf("Xray-%s-%s.zip", goos, arch), nil
-	case "darwin":
-		return "Xray-macos-" + arch + ".zip", nil
-	}
-	return "", fmt.Errorf("unsupported os %s", goos)
-}
-
 func fetch(dir, goos, goarch string) error {
-	name, err := assetName(goos, goarch)
+	name, err := xray.AssetName(goos, goarch)
 	if err != nil {
 		return err
 	}
@@ -71,7 +56,7 @@ func fetch(dir, goos, goarch string) error {
 	if err != nil {
 		return err
 	}
-	want, err := sha256FromDgst(dgst)
+	want, err := xray.ParseDgst(dgst)
 	if err != nil {
 		return err
 	}
@@ -114,18 +99,6 @@ func download(url string) ([]byte, error) {
 		return nil, fmt.Errorf("download %s: %s", url, resp.Status)
 	}
 	return io.ReadAll(resp.Body)
-}
-
-// sha256FromDgst reads the "SHA2-256= <hex>" line of an Xray .dgst file.
-func sha256FromDgst(b []byte) (string, error) {
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	for sc.Scan() {
-		k, v, ok := strings.Cut(sc.Text(), "=")
-		if ok && strings.TrimSpace(k) == "SHA2-256" {
-			return strings.ToLower(strings.TrimSpace(v)), nil
-		}
-	}
-	return "", fmt.Errorf("no SHA2-256 in digest file")
 }
 
 func extract(f *zip.File, dst string) error {

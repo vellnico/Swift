@@ -5,6 +5,7 @@
   import { t } from '../lib/i18n/index.svelte';
   import { fadeShift, stagger } from '../lib/motion';
   import { live } from '../lib/state.svelte';
+  import { href } from '../lib/router.svelte';
   import { stats, watchStats } from '../lib/stats.svelte';
   import Alert from '../lib/ui/Alert.svelte';
   import Badge from '../lib/ui/Badge.svelte';
@@ -21,6 +22,7 @@
     users: number;
     usersEnabled: number;
     cert?: { kind: string; lastError: string };
+    xrayUpdate?: string;
   }
 
   let overview = $state<Overview | null>(null);
@@ -48,6 +50,11 @@
 <Page title={t('nav.dashboard')}>
   {#if overview?.cert?.lastError}
     <div in:fadeShift><Alert kind="warning">{t('dash.cert_error', { error: overview.cert.lastError })}</Alert></div>
+  {/if}
+  {#if overview?.xrayUpdate}
+    <div in:fadeShift>
+      <Alert kind="warning">{t('dash.xray_update', { version: overview.xrayUpdate })} <a href={href('/settings')}>{t('dash.xray_update_action')}</a></Alert>
+    </div>
   {/if}
 
   {#if !stats.loaded}

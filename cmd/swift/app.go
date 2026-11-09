@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/vellnico/swift/internal/auth"
@@ -41,6 +42,24 @@ type app struct {
 	sub      *web.SubServer
 	stats    *sysstat.Collector
 	holder   *certsPkg.Holder
+	updater  *service.XrayUpdater
+	panel    *service.Panel
+
+	xrayVersion atomic.Pointer[string]
+	panelPort   atomic.Int64
+	move        chan int // new panel port
+}
+
+func (a *app) version() string {
+	if v := a.xrayVersion.Load(); v != nil {
+		return *v
+	}
+	return xray.Version
+}
+
+func (a *app) setVersion(v string) {
+	a.xrayVersion.Store(&v)
+	a.bus.PublishSticky("xray_status", xrayStatus{a.sup.Status(), v})
 }
 
 // startCerts loads (or creates) the certificate for TLS listeners and keeps it renewed.
@@ -73,8 +92,8 @@ type xrayStatus struct {
 	Version string `json:"version"`
 }
 
-func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.Logger, panelPath string) (*app, error) {
-	a := &app{cfg: cfg, st: st, log: log, bus: bus.New()}
+func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.Logger, panelPort int, panelPath string, pinned bool) (*app, error) {
+	a := &app{cfg: cfg, st: st, log: log, bus: bus.New(), move: make(chan int, 1)}
 
 	apiPort, err := service.EnsureAPIPort(ctx, st)
 	if err != nil {
@@ -90,10 +109,10 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		Bin:        cfg.XrayPath(),
 		ConfigPath: cfgPath,
 		Log:        log,
-		OnStatus:   func(i xray.StatusInfo) { a.bus.PublishSticky("xray_status", xrayStatus{i, xray.Version}) },
+		OnStatus:   func(i xray.StatusInfo) { a.bus.PublishSticky("xray_status", xrayStatus{i, a.version()}) },
 		OnEvent:    func(level, key string, p map[string]any) { a.event(level, "xray", key, p) },
 	}
-	a.bus.PublishSticky("xray_status", xrayStatus{a.sup.Status(), xray.Version})
+	a.bus.PublishSticky("xray_status", xrayStatus{a.sup.Status(), a.version()})
 	a.xray = &service.Xray{
 		Store:      st,
 		Runner:     xray.ExecRunner{},
@@ -140,7 +159,32 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		},
 	}
 
+	asset, _ := xray.AssetName(runtime.GOOS, runtime.GOARCH)
+	a.updater = &service.XrayUpdater{
+		Store: st, Xray: a.xray, Source: xray.GitHubReleases{}, Asset: asset, Binary: xray.BinaryName(runtime.GOOS),
+		Probe: xray.BinaryVersion, Event: a.event, OnVersion: a.setVersion,
+		Progress: func(stage, detail string) {
+			a.bus.Publish("xray_update", map[string]string{"stage": stage, "detail": detail})
+		},
+	}
+	a.panelPort.Store(int64(panelPort))
+	a.panel = &service.Panel{
+		Store: st, Ports: &service.Ports{Store: st, Checker: service.OSPorts{}}, Pinned: pinned, Event: a.event,
+		Move: func(port int, path string) {
+			// let the reply reach the browser before the old address goes away
+			time.AfterFunc(500*time.Millisecond, func() {
+				a.srv.SetPanelPath(path)
+				if int64(port) != a.panelPort.Load() {
+					a.move <- port
+				}
+			})
+		},
+	}
+
 	a.srv = web.New(web.Deps{
+		Panel:     a.panel,
+		Updater:   a.updater,
+		PanelPort: func() int { return int(a.panelPort.Load()) },
 		PanelPath: panelPath,
 		Assets:    webassets.Panel(),
 		Log:       log,
@@ -154,7 +198,7 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		OnEvent:   func(ev store.Event) { a.bus.Publish("event", ev) },
 	})
 	a.srv.Handle("GET /api/xray/status", func(w http.ResponseWriter, _ *http.Request) {
-		web.WriteJSON(w, http.StatusOK, xrayStatus{a.sup.Status(), xray.Version})
+		web.WriteJSON(w, http.StatusOK, xrayStatus{a.sup.Status(), a.version()})
 	})
 
 	switch {
@@ -225,6 +269,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request) {
 	if c, err := a.st.Certificate(ctx); err == nil {
 		out["cert"] = c
 	}
+	if info := a.updater.Info(ctx); info.Available {
+		out["xrayUpdate"] = info.Latest
+	}
 	web.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -251,5 +298,7 @@ func (a *app) startXray(ctx context.Context) {
 			return
 		}
 	}
+	a.setVersion(a.updater.Current(ctx))
 	go a.sup.Run(ctx)
+	go a.updater.RunChecks(ctx, 24*time.Hour)
 }

@@ -107,16 +107,17 @@ func serve(cfgPath string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	a, err := newApp(ctx, cfg, st, log, path)
+	subPort, err := service.EnsureSubPort(ctx, st, cfg.SubPort, port, func() int { return 20000 + randInt(40001) })
+	if err != nil {
+		return err
+	}
+	pinned := cfg.PanelPort != 0 || cfg.PanelPath != "" || subPort == port
+	a, err := newApp(ctx, cfg, st, log, port, path, pinned)
 	if err != nil {
 		return err
 	}
 	if _, err := st.FirstAdmin(ctx); errors.Is(err, store.ErrNotFound) {
 		fmt.Fprintln(stdout, "No administrator yet: run `swift admin reset` to create one.")
-	}
-	subPort, err := service.EnsureSubPort(ctx, st, cfg.SubPort, port, func() int { return 20000 + randInt(40001) })
-	if err != nil {
-		return err
 	}
 	go sessionGC(ctx, st, log)
 	if err := a.startCerts(ctx); err != nil {
@@ -127,17 +128,40 @@ func serve(cfgPath string, stdout io.Writer) error {
 	a.startGeoUpdates(ctx)
 
 	panelH, subH := a.handlers(port, subPort)
-	servers := []*http.Server{newHTTPServer(cfg.Listen, port, panelH)}
-	if subH != nil {
-		servers = append(servers, newHTTPServer(cfg.Listen, subPort, subH))
-	}
-	listeners := make([]net.Listener, 0, len(servers))
-	for _, hs := range servers {
+	errc := make(chan error, 4)
+	start := func(p int, h http.Handler) (*http.Server, error) {
+		hs := newHTTPServer(cfg.Listen, p, h)
 		ln, err := net.Listen("tcp", hs.Addr)
 		if err != nil {
-			return fmt.Errorf("listen %s: %w", hs.Addr, err)
+			return nil, fmt.Errorf("listen %s: %w", hs.Addr, err)
 		}
-		listeners = append(listeners, ln)
+		go func() {
+			var err error
+			if cfg.InsecureHTTP {
+				err = hs.Serve(ln)
+			} else {
+				// certificates come from GetCertificate and can change while serving
+				hs.TLSConfig = a.holder.TLSConfig()
+				hs.ErrorLog = stdlog.New(io.Discard, "", 0) // handshake noise from scanners
+				err = hs.ServeTLS(web.TLSOnly(ln), "", "")
+			}
+			if !errors.Is(err, http.ErrServerClosed) {
+				errc <- err
+			}
+		}()
+		return hs, nil
+	}
+	panel, err := start(port, panelH)
+	if err != nil {
+		return err
+	}
+	servers := []*http.Server{panel}
+	if subH != nil {
+		sub, err := start(subPort, subH)
+		if err != nil {
+			return err
+		}
+		servers = append(servers, sub)
 	}
 	host := cfg.Listen
 	if host == "" {
@@ -149,30 +173,35 @@ func serve(cfgPath string, stdout io.Writer) error {
 		log.Warn("serving without TLS (insecure_http); use only for local development")
 	}
 
-	errc := make(chan error, len(servers))
-	for i, hs := range servers {
-		go func() {
-			if cfg.InsecureHTTP {
-				errc <- hs.Serve(listeners[i])
-				return
+	shutdown := func(hs *http.Server) {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if hs.Shutdown(sctx) != nil {
+			_ = hs.Close() // SSE streams never go idle
+		}
+	}
+	for {
+		select {
+		case err := <-errc:
+			return fmt.Errorf("http server: %w", err)
+		case p := <-a.move:
+			next, err := start(p, panelH)
+			if err != nil {
+				log.Error("move panel", "err", err)
+				a.event("error", "panel", "panel.move_failed", map[string]any{"port": p})
+				continue
 			}
-			// certificates come from GetCertificate and can change while serving
-			hs.TLSConfig = a.holder.TLSConfig()
-			hs.ErrorLog = stdlog.New(io.Discard, "", 0) // handshake noise from scanners
-			errc <- hs.ServeTLS(web.TLSOnly(listeners[i]), "", "")
-		}()
+			shutdown(servers[0])
+			servers[0] = next
+			a.panelPort.Store(int64(p))
+			log.Info("panel moved", "port", p)
+		case <-ctx.Done():
+			for _, hs := range servers {
+				shutdown(hs)
+			}
+			return nil
+		}
 	}
-	select {
-	case err := <-errc:
-		return fmt.Errorf("http server: %w", err)
-	case <-ctx.Done():
-	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for _, hs := range servers {
-		_ = hs.Shutdown(shutdownCtx)
-	}
-	return nil
 }
 
 func newHTTPServer(host string, port int, h http.Handler) *http.Server {
