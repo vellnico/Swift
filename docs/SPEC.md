@@ -453,7 +453,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/<owner>/swift/main/scripts/i
 - [x] 5. Пользователи и подписки
 - [x] 6. Дашборд и метрики
 - [x] 7. Сертификаты
-- [ ] 8. Раздельное туннелирование
+- [x] 8. Раздельное туннелирование
 - [ ] 9. install.sh, systemd, релизы
 - [ ] 10. Обновление Xray, журнал, настройки
 - [ ] 11. Полировка
@@ -619,3 +619,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/<owner>/swift/main/scripts/i
 | 2026-11-09 | 7 | Ограничение: запасной челлендж TLS-ALPN-01 слушает 443/tcp, который обычно занят VLESS Reality Vision. Поэтому на практике работает HTTP-01 (порт 80). Если 80 закрыт, а 443 занят Xray, выпуск завершится понятной ошибкой с текстом от Let's Encrypt. |
 | 2026-11-09 | 7 | С этого этапа панель и подписки работают только по HTTPS (`GetCertificate`, подмена на лету). Plain HTTP — только ключом `insecure_http = true` для локальной разработки. Соединения, которые начинаются не с TLS handshake, закрываются молча: на HTTP-зонд нет ответа «HTTP request to an HTTPS server», который выдавал бы Go-сервер. |
 | 2026-11-09 | 7 | Перед выпуском ACME проверяется A-запись домена против `server_address` (если он задан). После выпуска, продления и возврата к IP Xray перезапускается принудительно, даже если текст конфига не изменился: пути к файлам сертификата прежние, а содержимое новое. Смена режима IP ↔ домен — через диалог с предупреждением об обновлении подписок. |
+| 2026-11-09 | 8 | Сверено с `runetfreedom/russia-v2ray-rules-dat` (ветка `release`, 2026-11-09): `geoip.dat`, `geosite.dat` + `.sha256sum`; rule-set'ы sing-box `sing-box/rule-set-geosite/geosite-category-ru.srs`, `geosite-ru-available-only-inside.srs`, `sing-box/rule-set-geoip/geoip-ru.srs`. Записано в `internal/routing/presets.go`. |
+| 2026-11-09 | 8 | Пресет «Российское напрямую»: `.ru`/`.su`/`.рф`, `category-ru`, `geoip:ru` и приватные сети → direct. В Xray-JSON для v2rayNG нет `ru-available-only-inside`: v2rayNG по умолчанию может использовать geo-файлы Loyalsoldier без этой категории, и тогда конфиг не загрузится. sing-box и Happ скачивают списки runetfreedom (sing-box — через proxy, т. к. GitHub бывает недоступен напрямую). Xray-JSON с пресетом проходит `xray run -test`. Пресет по умолчанию включён. |
+| 2026-11-09 | 8 | **Ожидает ручной проверки.** (1) В Hiddify российский сайт открывается с IP клиента, зарубежный — с IP сервера. (2) Hiddify принимает наш блок `dns` в формате серверов `address` (sing-box ≤ 1.11) и правила `action: sniff`/`hijack-dns` (≥ 1.11). (3) Happ принимает заголовок `routing` в виде base64 JSON-профиля, как в §8 (возможно, нужен формат `happ://routing/add/<base64>`). |
+| 2026-11-09 | 8 | Geo-файлы сервера обновляются раз в 24 ч (кроме dev) рядом с бинарником Xray с проверкой SHA-256 и атомарной заменой. Xray не перезапускается: серверный конфиг использует только `geoip:private`, новые файлы подхватятся при следующем старте. |

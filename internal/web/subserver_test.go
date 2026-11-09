@@ -94,6 +94,21 @@ func TestSubscriptionFormatsAndHeaders(t *testing.T) {
 	}
 }
 
+func TestHappRoutingHeader(t *testing.T) {
+	s, on, off := subEnv(t)
+	s.HappRouting = func(*http.Request) string { return "cHJvZmlsZQ==" }
+	h := s.Handler()
+	if got := subGet(h, "/s/"+on.SubToken, "Happ/2.8.1", nil).Header().Get("routing"); got != "cHJvZmlsZQ==" {
+		t.Fatalf("Happ routing header %q", got)
+	}
+	if got := subGet(h, "/s/"+on.SubToken, "v2RayTun/5.1", nil).Header().Get("routing"); got != "" {
+		t.Fatal("routing header is for Happ only")
+	}
+	if got := subGet(h, "/s/"+off.SubToken, "Happ/2.8.1", nil).Header().Get("routing"); got != "" {
+		t.Fatal("paused users get no routing header")
+	}
+}
+
 func TestSubscriptionHTMLPage(t *testing.T) {
 	s, on, off := subEnv(t)
 	h := s.Handler()

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/vellnico/swift/internal/links"
+	"github.com/vellnico/swift/internal/routing"
 	"github.com/vellnico/swift/internal/xray"
 )
 
@@ -113,6 +114,42 @@ func TestXrayJSON(t *testing.T) {
 	off, _ := XrayJSON(disabled())
 	if strings.TrimSpace(string(off)) != "[]" {
 		t.Fatalf("disabled user: %s", off)
+	}
+}
+
+func TestPresetGolden(t *testing.T) {
+	req := Request{User: user, Endpoints: eps, Routing: routing.RUDirect{}}
+	sb, err := SingBox(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "singbox_ru_direct.json", sb)
+	xj, err := XrayJSON(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "xray_ru_direct.json", xj)
+	var configs []json.RawMessage
+	if err := json.Unmarshal(xj, &configs); err != nil {
+		t.Fatal(err)
+	}
+	bin := xray.TestBinary()
+	if bin == "" {
+		t.Fatal("xray binary not found: run `make xray`")
+	}
+	for i, c := range configs {
+		p := filepath.Join(t.TempDir(), "client.json")
+		if err := os.WriteFile(p, c, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := (xray.ExecRunner{}).Test(context.Background(), bin, p); err != nil {
+			t.Fatalf("client config %d with the preset rejected by xray: %v", i, err)
+		}
+	}
+	// without the preset everything goes through the VPN
+	plain, _ := SingBox(Request{User: user, Endpoints: eps})
+	if strings.Contains(string(plain), "rule_set") || strings.Contains(string(plain), "dns-direct") {
+		t.Fatal("preset rules leaked into the plain config")
 	}
 }
 

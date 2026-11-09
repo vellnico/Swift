@@ -56,6 +56,9 @@ func New(d Deps) *Server {
 	s.registerProfiles()
 	s.registerUsers()
 	s.registerCerts()
+	if d.Store != nil {
+		s.registerRouting()
+	}
 	return s
 }
 

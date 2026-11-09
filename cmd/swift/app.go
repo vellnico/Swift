@@ -16,6 +16,7 @@ import (
 	"github.com/vellnico/swift/internal/bus"
 	certsPkg "github.com/vellnico/swift/internal/certs"
 	"github.com/vellnico/swift/internal/config"
+	"github.com/vellnico/swift/internal/routing"
 	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
 	"github.com/vellnico/swift/internal/sysstat"
@@ -129,7 +130,15 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 
 	a.users = &service.Users{Store: st, Xray: a.xray}
 	a.subs = &service.Subscriptions{Store: st, Certs: certs, Scheme: func(context.Context) string { return service.Scheme(cfg.InsecureHTTP) }}
-	a.sub = &web.SubServer{Store: st, Subs: a.subs, Assets: webassets.SubPage(), Dict: webassets.Dictionary, Log: log}
+	a.subs.Routing = service.RoutingFor(st)
+	a.sub = &web.SubServer{Store: st, Subs: a.subs, Assets: webassets.SubPage(), Dict: webassets.Dictionary, Log: log,
+		HappRouting: func(r *http.Request) string {
+			if p, err := service.Preset(r.Context(), st); err == nil && p == routing.PresetRUDirect {
+				return routing.RUDirect{}.HappHeader()
+			}
+			return ""
+		},
+	}
 
 	a.srv = web.New(web.Deps{
 		PanelPath: panelPath,
@@ -163,6 +172,18 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 	})
 	a.srv.Handle("GET /api/overview", a.overview)
 	return a, nil
+}
+
+// startGeoUpdates keeps the server's geo files fresh (production only: the files are ~100 MB).
+func (a *app) startGeoUpdates(ctx context.Context) {
+	if a.cfg.Dev {
+		return
+	}
+	g := &routing.GeoUpdater{
+		Dir:   filepath.Dir(a.cfg.XrayPath()),
+		Event: func(level, key string, p map[string]any) { a.event(level, "geo", key, p) },
+	}
+	go g.Run(ctx, 24*time.Hour)
 }
 
 func (a *app) startStats(ctx context.Context) {
