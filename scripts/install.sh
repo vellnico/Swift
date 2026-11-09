@@ -241,7 +241,7 @@ ensure_tools() {
 }
 
 fetch() {
-	curl -fsSL --retry 3 -o "$2" "$1" ||
+	curl -fsSL --retry 5 --retry-delay 3 -o "$2" "$1" ||
 		die "Не удалось скачать ${1##*/}" "Проверьте, что сервер видит github.com, и запустите установку снова."
 }
 

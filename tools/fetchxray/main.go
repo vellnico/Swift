@@ -88,7 +88,23 @@ func fetch(dir, goos, goarch string) error {
 	return nil
 }
 
+// download retries: GitHub's release host answers 5xx from time to time.
 func download(url string) ([]byte, error) {
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt*attempt) * 3 * time.Second)
+		}
+		var body []byte
+		if body, err = downloadOnce(url); err == nil {
+			return body, nil
+		}
+		fmt.Fprintln(os.Stderr, "fetchxray:", err)
+	}
+	return nil, err
+}
+
+func downloadOnce(url string) ([]byte, error) {
 	c := &http.Client{Timeout: 5 * time.Minute}
 	resp, err := c.Get(url)
 	if err != nil {
