@@ -51,7 +51,9 @@ wait_panel() {
 echo "== clean install on $BASE"
 out="$(run_installer)" || fail "install exited with an error: $out"
 printf '%s\n' "$out"
-grep -q 'Пароль:  \S\{20\}$' <<<"$out" || fail "credentials box missing"
+grep -q 'Пароль *[^ ]\{20\} *│$' <<<"$out" || fail "credentials box missing"
+grep -q '100%  Готово' <<<"$out" || fail "progress did not reach 100%"
+grep -qE 'apt|Reading|Selecting|Profile ' <<<"$out" && fail "installer leaked command output to the screen"
 ct systemctl is-active --quiet swift || fail "swift.service is not active"
 wait_panel
 ct pgrep -f /usr/local/lib/swift/xray >/dev/null || fail "xray is not running"
@@ -62,8 +64,8 @@ login="$(ct swift admin show -config /etc/swift/swift.toml | sed -n 's/^Login: *
 
 echo "== repeated install"
 out="$(run_installer)" || fail "second install failed: $out"
-grep -q 'up to date' <<<"$out" || fail "second install did not report an existing setup"
-grep -q 'Пароль' <<<"$out" && fail "second install printed a new password"
+grep -q 'Swift уже установлен' <<<"$out" || fail "second install did not report an existing setup"
+grep -q 'Пароль *[^ ]\{20\} *│$' <<<"$out" && fail "second install printed a new password"
 [ "$(ct swift ports -config /etc/swift/swift.toml)" = "$ports_before" ] || fail "second install changed ports"
 ct swift admin show -config /etc/swift/swift.toml | grep -q "^Login: $login$" || fail "second install changed the login"
 wait_panel
