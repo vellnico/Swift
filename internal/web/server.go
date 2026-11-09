@@ -126,7 +126,8 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request, name string) {
 		return
 	}
 	name = path.Clean("/" + name)[1:]
-	if name != "" {
+	// index.html always goes through the SPA branch below, which sets the language
+	if name != "" && name != "index.html" {
 		if st, err := fs.Stat(s.Assets, name); err == nil && !st.IsDir() {
 			switch {
 			case strings.HasPrefix(name, "assets/"):
@@ -145,10 +146,12 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request, name string) {
 		_, _ = w.Write([]byte("Swift: frontend is not built, run make build\n"))
 		return
 	}
+	// the UI starts in the language chosen at install time unless the browser saved another
+	body = setHTMLLang(body, service.Language(r.Context(), s.Store))
 	s.ensureCSRF(w, r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(body)
+	writeBody(w, r, body)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {

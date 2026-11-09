@@ -124,7 +124,7 @@ func TestSubscriptionHTMLPage(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "<b>") {
 		t.Fatal("user name must be escaped inside the JSON block")
 	}
-	if PageLang("de-DE,ru;q=0.8") != "ru" || PageLang("fr") != "en" {
+	if PageLang("de-DE,ru;q=0.8", "en") != "ru" || PageLang("fr", "") != "en" || PageLang("fr", "ru") != "ru" || PageLang("en-GB", "ru") != "en" {
 		t.Fatal("language detection")
 	}
 }

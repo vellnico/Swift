@@ -69,6 +69,7 @@ func adminShow(ctx context.Context, cfg config.Config, st *store.Store, w io.Wri
 		return err
 	}
 	fmt.Fprintf(w, "URL:   %s\nLogin: %s\n", url, a.Username)
+	fmt.Fprintf(w, "Language: %s\n", service.Language(ctx, st))
 	return nil
 }
 

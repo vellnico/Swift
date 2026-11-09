@@ -85,6 +85,22 @@ func (p *Panel) Change(ctx context.Context, curPort int, curPath string, port in
 	return nil
 }
 
+// DefaultLanguage is the panel language when the installer did not choose one.
+const DefaultLanguage = "en"
+
+// ValidLanguage reports whether the UI has a dictionary for lang.
+func ValidLanguage(lang string) bool { return lang == "en" || lang == "ru" }
+
+// Language is the default UI language chosen at install time.
+func Language(ctx context.Context, st *store.Store) string {
+	if st != nil {
+		if v, err := st.Setting(ctx, "language"); err == nil && ValidLanguage(v) {
+			return v
+		}
+	}
+	return DefaultLanguage
+}
+
 // SetAddress changes the public IP that links and subscriptions use.
 func (p *Panel) SetAddress(ctx context.Context, address string) error {
 	ip := net.ParseIP(address)

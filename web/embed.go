@@ -30,10 +30,10 @@ func Panel() fs.FS { return sub(dist, "dist") }
 // SubPage returns the built subscription page bundle.
 func SubPage() fs.FS { return sub(subDist, "sub/dist") }
 
-// Dictionary returns the UI strings of a language ("ru" or "en").
+// Dictionary returns the UI strings of a language ("en" or "ru"); anything else gets English.
 func Dictionary(lang string) map[string]string {
-	if lang != "en" {
-		lang = "ru"
+	if lang != "ru" {
+		lang = "en"
 	}
 	b, err := dicts.ReadFile("src/lib/i18n/" + lang + ".json")
 	if err != nil {

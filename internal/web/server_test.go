@@ -289,3 +289,21 @@ func TestAssetsAreGzipped(t *testing.T) {
 		t.Fatal("q=0 ignored")
 	}
 }
+
+func TestIndexCarriesInstallLanguage(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Assets = fstest.MapFS{"index.html": {Data: []byte(`<!doctype html><html lang="en"><head></head></html>`)}}
+	h := e.srv.Handler()
+	for _, tc := range []struct{ setting, want string }{{"", "en"}, {"ru", "ru"}, {"xx", "en"}} {
+		if tc.setting != "" {
+			if err := e.st.SetSetting(context.Background(), "language", tc.setting); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, p := range []string{"/abc123/", "/abc123/index.html", "/abc123/users"} {
+			if body := get(t, h, p).Body.String(); !strings.Contains(body, `<html lang="`+tc.want+`">`) {
+				t.Fatalf("setting %q, %s: %s", tc.setting, p, body)
+			}
+		}
+	}
+}

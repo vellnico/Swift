@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Swift installer.
 #   bash <(curl -fsSL https://raw.githubusercontent.com/vellnico/Swift/main/scripts/install.sh)
-# Flags: --update, --uninstall [--purge], --version <tag>, --domain <d>,
-#        --address <ip>, --non-interactive, --no-bbr, --from-dir <dir>
 # Running it again on an installed server changes nothing and keeps the password.
 set -Eeuo pipefail
 
@@ -15,8 +13,10 @@ UNIT=/etc/systemd/system/swift.service
 SYSCTL=/etc/sysctl.d/99-swift.conf
 LOG=/var/log/swift-install.log
 
+# Names must not clash with /etc/os-release (VERSION, ID, NAME...), which check_system sources.
 MODE=install
-VERSION=latest
+SWIFT_VERSION=latest
+UI_LANG=""
 DOMAIN=""
 ADDRESS=""
 INTERACTIVE=1
@@ -24,6 +24,7 @@ BBR=1
 PURGE=0
 FROM_DIR=""
 TMP=""
+TAG=""
 
 # Character counts below must be in characters, not bytes.
 if locale -a 2>/dev/null | grep -qiE '^c\.utf-?8$'; then export LC_ALL=C.UTF-8; fi
@@ -41,6 +42,11 @@ PCT=0
 LABEL=""
 STATE=""
 TICKER=""
+
+# L prints the English or the Russian text depending on the chosen language.
+L() {
+	if [ "$UI_LANG" = ru ]; then printf '%s' "$2"; else printf '%s' "$1"; fi
+}
 
 ui() { printf '%s\n' "$*" >&3; }
 
@@ -114,7 +120,7 @@ die() {
 	ui ""
 	ui "  ${B}✕  $1${R}"
 	[ $# -gt 1 ] && ui "     $2"
-	[ -s "$LOG" ] && ui "     ${D}Подробности: $LOG${R}"
+	[ -s "$LOG" ] && ui "     ${D}$(L "Details" "Подробности"): $LOG${R}"
 	ui ""
 	exit 1
 }
@@ -125,12 +131,12 @@ on_error() {
 	[ "$BASHPID" = "$$" ] || exit "$code"
 	progress_stop "✕"
 	ui ""
-	ui "  ${B}✕  Не выполнен шаг «${LABEL:-подготовка}»${R}"
+	ui "  ${B}✕  $(L "Step failed" "Не выполнен шаг"): ${LABEL:-$(L "preparation" "подготовка")}${R}"
 	if [ -s "$LOG" ]; then
 		ui ""
 		tail -n 8 "$LOG" | sed "s/^/     ${D}/; s/\$/${R}/" >&3
 		ui ""
-		ui "     ${D}Весь журнал: $LOG${R}"
+		ui "     ${D}$(L "Full log" "Весь журнал"): $LOG${R}"
 	fi
 	ui ""
 	exit "$code"
@@ -151,7 +157,7 @@ box() {
 	shift
 	for row in "$@"; do
 		label=${row%%|*} value=${row#*|}
-		[ $((9 + ${#value})) -gt "$width" ] && width=$((9 + ${#value}))
+		[ $((11 + ${#value})) -gt "$width" ] && width=$((11 + ${#value}))
 	done
 	width=$((width + 6))
 	local hr pad
@@ -167,26 +173,39 @@ box() {
 			continue
 		fi
 		label=${row%%|*} value=${row#*|}
-		pad=$(printf '%*s' $((width - 12 - ${#value})) '')
-		ui "  │   ${D}${label}$(printf '%*s' $((9 - ${#label})) '')${R}${value}${pad}│"
+		pad=$(printf '%*s' $((width - 14 - ${#value})) '')
+		ui "  │   ${D}${label}$(printf '%*s' $((11 - ${#label})) '')${R}${value}${pad}│"
 	done
 	ui "  │$(printf '%*s' "$width" '')│"
 	ui "  └${hr}┘"
 }
 
 start_log() {
-	[ "$(id -u)" -eq 0 ] || die "Нужны права root" "Выполните sudo -i и запустите команду снова."
+	[ "$(id -u)" -eq 0 ] || die "$(L "Root is required" "Нужны права root")" "$(L "Run sudo -i and start the command again." "Выполните sudo -i и запустите команду снова.")"
 	umask 077
 	: >"$LOG"
 	umask 022
 	exec >>"$LOG" 2>&1
-	printf 'swift installer, %s, mode %s\n' "$(date -u '+%F %T UTC')" "$MODE"
+	printf 'swift installer, %s, mode %s, language %s\n' "$(date -u '+%F %T UTC')" "$MODE" "$UI_LANG"
 }
 
 # --- arguments ---------------------------------------------------------------
 
+# The text is inline: with bash <(curl ...) the script file cannot be read again.
 usage() {
-	sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//' >&3
+	cat >&3 <<'EOF'
+Swift installer
+  bash <(curl -fsSL https://raw.githubusercontent.com/vellnico/Swift/main/scripts/install.sh) [flags]
+
+  --lang en|ru        installer and panel language (asked when omitted)
+  --domain <name>     issue a Let's Encrypt certificate for the domain
+  --address <ip>      public IP when it is not detected
+  --version <tag>     install a specific release
+  --update            update Swift and Xray, backing up the database first
+  --uninstall         remove Swift; add --purge to remove data and settings too
+  --no-bbr            leave TCP settings alone
+  --non-interactive   ask nothing
+EOF
 	exit "${1:-0}"
 }
 
@@ -196,37 +215,79 @@ parse_args() {
 		--update) MODE=update ;;
 		--uninstall) MODE=uninstall ;;
 		--purge) PURGE=1 ;;
-		--version) VERSION="${2:?--version needs a tag}"; shift ;;
+		--version) SWIFT_VERSION="${2:?--version needs a tag}"; shift ;;
+		--lang) UI_LANG="$(lang_code "${2:?--lang needs en or ru}")"; shift ;;
 		--domain) DOMAIN="${2:?--domain needs a name}"; shift ;;
 		--address) ADDRESS="${2:?--address needs an IP}"; shift ;;
 		--non-interactive) INTERACTIVE=0 ;;
 		--no-bbr) BBR=0 ;;
 		--from-dir) FROM_DIR="${2:?--from-dir needs a directory}"; shift ;;
 		-h | --help) usage 0 ;;
-		*) ui "Неизвестный флаг: $1"; usage 2 ;;
+		*) ui "Unknown flag: $1"; usage 2 ;;
 		esac
 		shift
 	done
 }
 
+# lang_code maps an answer to en or ru; anything unknown is English.
+lang_code() {
+	case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+	2 | ru | rus | russian | рус | русский | Русский) printf 'ru' ;;
+	*) printf 'en' ;;
+	esac
+}
+
+# choose_lang asks for the installer and panel language before anything else.
+choose_lang() {
+	[ -z "$UI_LANG" ] || return 0
+	UI_LANG=en
+	[ "$INTERACTIVE" -eq 1 ] || return 0
+	local answer=""
+	ui ""
+	ui "  ${B}Language / Язык${R}"
+	ui "  ${B}1${R}  English"
+	ui "  ${B}2${R}  Русский"
+	printf '  %s›%s ' "$D" "$R" >&3
+	read -r answer </dev/tty || true
+	UI_LANG="$(lang_code "$answer")"
+}
+
+# installed_lang reads the language chosen at install time (update and uninstall).
+installed_lang() {
+	[ -z "$UI_LANG" ] || return 0
+	UI_LANG=en
+	if [ -x "$BIN" ]; then
+		local v
+		v="$("$BIN" admin show -config "$ETC/swift.toml" 2>/dev/null | sed -n 's/^Language: *//p' || true)"
+		if [ "$v" = ru ]; then UI_LANG=ru; fi
+	fi
+}
+
 # --- steps -------------------------------------------------------------------
 
 check_system() {
-	[ -r /etc/os-release ] || die "Не удалось определить систему" "Нет файла /etc/os-release."
+	[ -r /etc/os-release ] || die "$(L "Cannot detect the system" "Не удалось определить систему")" "$(L "/etc/os-release is missing." "Нет файла /etc/os-release.")"
+	local id ver_id pretty
+	# a subshell keeps os-release variables (VERSION among them) out of the installer
 	# shellcheck disable=SC1091
-	. /etc/os-release
-	local major="${VERSION_ID%%.*}"
-	case "${ID:-}" in
-	debian) [ "${major:-0}" -ge 11 ] || die "Нужен Debian 11 или новее" ;;
-	ubuntu) [ "${major:-0}" -ge 20 ] || die "Нужна Ubuntu 20.04 или новее" ;;
-	*) die "Поддерживаются Debian 11+ и Ubuntu 20.04+" "Сейчас: ${PRETTY_NAME:-${ID:-неизвестно}}." ;;
+	id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+	# shellcheck disable=SC1091
+	ver_id="$(. /etc/os-release && printf '%s' "${VERSION_ID:-}")"
+	# shellcheck disable=SC1091
+	pretty="$(. /etc/os-release && printf '%s' "${PRETTY_NAME:-${ID:-unknown}}")"
+	local major="${ver_id%%.*}"
+	case "$major" in '' | *[!0-9]*) major=0 ;; esac
+	case "$id" in
+	debian) [ "$major" -ge 11 ] || die "$(L "Debian 11 or newer is required" "Нужен Debian 11 или новее")" ;;
+	ubuntu) [ "$major" -ge 20 ] || die "$(L "Ubuntu 20.04 or newer is required" "Нужна Ubuntu 20.04 или новее")" ;;
+	*) die "$(L "Supported systems: Debian 11+ and Ubuntu 20.04+" "Поддерживаются Debian 11+ и Ubuntu 20.04+")" "$(L "This one: $pretty." "Сейчас: $pretty.")" ;;
 	esac
 	case "$(uname -m)" in
 	x86_64 | amd64) ARCH=amd64 XRAY_ARCH=64 ;;
 	aarch64 | arm64) ARCH=arm64 XRAY_ARCH=arm64-v8a ;;
-	*) die "Архитектура $(uname -m) не поддерживается" "Подойдут amd64 и arm64." ;;
+	*) die "$(L "Architecture $(uname -m) is not supported" "Архитектура $(uname -m) не поддерживается")" "$(L "amd64 and arm64 are supported." "Подойдут amd64 и arm64.")" ;;
 	esac
-	[ -d /run/systemd/system ] || die "Нужен systemd"
+	[ -d /run/systemd/system ] || die "$(L "systemd is required" "Нужен systemd")"
 }
 
 ensure_tools() {
@@ -242,7 +303,22 @@ ensure_tools() {
 
 fetch() {
 	curl -fsSL --retry 5 --retry-delay 3 -o "$2" "$1" ||
-		die "Не удалось скачать ${1##*/}" "Проверьте, что сервер видит github.com, и запустите установку снова."
+		die "$(L "Could not download ${1##*/}" "Не удалось скачать ${1##*/}")" "$(L "Make sure the server can reach github.com and run the installer again." "Проверьте, что сервер видит github.com, и запустите установку снова.")"
+}
+
+# release_tag sets TAG: --version as given (with a leading v), or the latest release.
+release_tag() {
+	TAG="$SWIFT_VERSION"
+	if [ "$TAG" != latest ]; then
+		case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
+		return
+	fi
+	TAG="$(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" || true)"
+	TAG="${TAG##*/}"
+	case "$TAG" in
+	v[0-9]*) ;;
+	*) die "$(L "No Swift release found" "Не найден релиз Swift")" "$(L "Make sure the server can reach github.com." "Проверьте, что сервер видит github.com.")" ;;
+	esac
 }
 
 # download_swift leaves the verified binary in $TMP/swift.
@@ -251,20 +327,14 @@ download_swift() {
 		install -m 0755 "$FROM_DIR/swift" "$TMP/swift"
 		return
 	fi
-	local tag="$VERSION"
-	if [ "$tag" = latest ]; then
-		tag="$(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" || true)"
-		tag="${tag##*/}"
-		if [ -z "$tag" ] || [ "$tag" = latest ]; then
-			die "Не найден релиз Swift" "Проверьте, что сервер видит github.com."
-		fi
-	fi
+	release_tag
+	local tag="$TAG"
 	local file="swift_${tag#v}_linux_${ARCH}.tar.gz"
 	local base="https://github.com/$REPO/releases/download/$tag"
 	fetch "$base/$file" "$TMP/$file"
 	fetch "$base/checksums.txt" "$TMP/checksums.txt"
 	if ! (cd "$TMP" && grep " ${file}\$" checksums.txt | sha256sum -c); then
-		die "Контрольная сумма Swift не совпала" "Файл повреждён при загрузке. Запустите установку снова."
+		die "$(L "Swift checksum mismatch" "Контрольная сумма Swift не совпала")" "$(L "The download is corrupted. Run the installer again." "Файл повреждён при загрузке. Запустите установку снова.")"
 	fi
 	tar -xzf "$TMP/$file" -C "$TMP" swift
 }
@@ -284,7 +354,7 @@ download_xray() {
 	want="$(sed -n 's/^SHA2-256= *//p' "$TMP/$zip.dgst" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
 	got="$(sha256sum "$TMP/$zip" | cut -d' ' -f1)"
 	if [ -z "$want" ] || [ "$want" != "$got" ]; then
-		die "Контрольная сумма Xray не совпала" "Файл повреждён при загрузке. Запустите установку снова."
+		die "$(L "Xray checksum mismatch" "Контрольная сумма Xray не совпала")" "$(L "The download is corrupted. Run the installer again." "Файл повреждён при загрузке. Запустите установку снова.")"
 	fi
 	unzip -oq "$TMP/$zip" xray geoip.dat geosite.dat -d "$TMP/xray"
 }
@@ -315,18 +385,19 @@ detect_address() {
 	if [ -z "$ADDRESS" ]; then
 		ADDRESS="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}' || true)"
 	fi
-	[ -n "$ADDRESS" ] || die "Не удалось определить IP сервера" "Укажите его флагом --address <ip>."
+	[ -n "$ADDRESS" ] || die "$(L "Cannot detect the server IP" "Не удалось определить IP сервера")" "$(L "Pass it with --address <ip>." "Укажите его флагом --address <ip>.")"
 }
 
 ask_domain() {
 	if [ -n "$DOMAIN" ] || [ "$INTERACTIVE" -eq 0 ]; then return; fi
 	local answer=""
-	printf '  Есть домен, который указывает на этот сервер? %s[y/N]%s ' "$D" "$R" >&3
+	printf '  %s %s[y/N]%s ' "$(L "Do you have a domain pointing at this server?" "Есть домен, который указывает на этот сервер?")" "$D" "$R" >&3
 	read -r answer </dev/tty || true
 	case "$answer" in
-	y | Y | yes | д | Д | да | Да)
-		printf '  Домен: ' >&3
+	y | Y | yes | Yes | YES | д | Д | да | Да | ДА)
+		printf '  %s: ' "$(L "Domain" "Домен")" >&3
 		read -r DOMAIN </dev/tty || true
+		DOMAIN="$(printf '%s' "$DOMAIN" | tr -d '[:space:]')"
 		;;
 	esac
 	ui ""
@@ -340,7 +411,7 @@ check_domain() {
 	*" $ADDRESS "*) ;;
 	*)
 		if [ "$INTERACTIVE" -eq 1 ]; then
-			die "Домен $DOMAIN не указывает на этот сервер" "A-запись: ${ips:-нет}, а IP сервера $ADDRESS. Исправьте DNS и запустите установку снова."
+			die "$(L "Domain $DOMAIN does not point at this server" "Домен $DOMAIN не указывает на этот сервер")" "$(L "A record: ${ips:-none}, server IP: $ADDRESS. Fix DNS and run the installer again." "A-запись: ${ips:-нет}, а IP сервера $ADDRESS. Исправьте DNS и запустите установку снова.")"
 		fi
 		printf 'domain %s points to %s, not %s; continuing without it\n' "$DOMAIN" "${ips:-nothing}" "$ADDRESS"
 		DOMAIN=""
@@ -397,7 +468,7 @@ start_service() {
 		sleep 0.5
 	done
 	journalctl -u swift --no-pager -n 30 || true
-	die "Панель не запустилась" "Причину покажет journalctl -u swift."
+	die "$(L "The panel did not start" "Панель не запустилась")" "$(L "journalctl -u swift shows the reason." "Причину покажет journalctl -u swift.")"
 }
 
 port_list() {
@@ -409,7 +480,8 @@ field() { printf '%s\n' "$1" | sed -n "s/^ *$2: *//p"; }
 # --- modes -------------------------------------------------------------------
 
 do_install() {
-	header "Установка панели"
+	choose_lang
+	header "$(L "Panel installation" "Установка панели")"
 	start_log
 	check_system
 	ask_domain
@@ -417,123 +489,125 @@ do_install() {
 	check_domain
 
 	progress_start
-	step 4 "Подготовка системы"
+	step 4 "$(L "Preparing the system" "Подготовка системы")"
 	ensure_tools
 	TMP="$(mktemp -d)"
 	local fresh=1
 	if [ -x "$BIN" ] && "$BIN" admin show -config "$ETC/swift.toml" | grep -q '^Login: [a-z0-9]\{8\}$'; then fresh=0; fi
-	step 12 "Загрузка Swift"
+	step 12 "$(L "Downloading Swift" "Загрузка Swift")"
 	download_swift
-	step 34 "Загрузка Xray"
+	step 34 "$(L "Downloading Xray" "Загрузка Xray")"
 	download_xray
-	step 58 "Установка файлов"
+	step 58 "$(L "Installing files" "Установка файлов")"
 	if [ -f "$UNIT" ]; then systemctl stop swift || true; fi
 	install_binaries
 	write_config
 	if [ -n "$DOMAIN" ]; then
-		step 64 "Профили и сертификат Let's Encrypt"
+		step 64 "$(L "Profiles and a Let's Encrypt certificate" "Профили и сертификат Let's Encrypt")"
 	else
-		step 64 "Профили и сертификат"
+		step 64 "$(L "Profiles and certificate" "Профили и сертификат")"
 	fi
-	local args=(-config "$ETC/swift.toml" -address "$ADDRESS")
+	local args=(-config "$ETC/swift.toml" -address "$ADDRESS" -lang "$UI_LANG")
 	if [ -n "$DOMAIN" ]; then args+=(-domain "$DOMAIN"); fi
 	"$BIN" setup "${args[@]}"
-	step 84 "Настройка сети"
+	step 84 "$(L "Network settings" "Настройка сети")"
 	enable_bbr
 	write_unit
 	open_ports
-	step 92 "Запуск панели"
+	step 92 "$(L "Starting the panel" "Запуск панели")"
 	start_service
 	local creds=""
-	[ "$fresh" -eq 1 ] && creds="$("$BIN" admin reset -config "$ETC/swift.toml")"
-	step 100 "Готово"
+	if [ "$fresh" -eq 1 ]; then creds="$("$BIN" admin reset -config "$ETC/swift.toml")"; fi
+	step 100 "$(L "Done" "Готово")"
 	progress_stop
 	ui ""
 
 	if [ -n "$creds" ]; then
-		box "Swift установлен" \
-			"Панель|$(field "$creds" URL)" \
-			"Логин|$(field "$creds" Login)" \
-			"Пароль|$(field "$creds" Password)"
+		box "$(L "Swift is installed" "Swift установлен")" \
+			"$(L "Panel" "Панель")|$(field "$creds" URL)" \
+			"$(L "Login" "Логин")|$(field "$creds" Login)" \
+			"$(L "Password" "Пароль")|$(field "$creds" Password)"
 		ui ""
-		ui "  Сохраните пароль: он показан один раз."
-		ui "  ${D}Новый пароль выдаст команда swift admin reset.${R}"
+		ui "  $(L "Save the password: it is shown only once." "Сохраните пароль: он показан один раз.")"
+		ui "  ${D}$(L "swift admin reset issues a new one." "Новый пароль выдаст команда swift admin reset.")${R}"
 	else
 		local show
 		show="$("$BIN" admin show -config "$ETC/swift.toml")"
-		box "Swift уже установлен" \
-			"Панель|$(field "$show" URL)" \
-			"Логин|$(field "$show" Login)"
+		box "$(L "Swift is already installed" "Swift уже установлен")" \
+			"$(L "Panel" "Панель")|$(field "$show" URL)" \
+			"$(L "Login" "Логин")|$(field "$show" Login)"
 		ui ""
-		ui "  Пароль прежний, данные и профили сохранены."
-		ui "  ${D}Новый пароль выдаст команда swift admin reset.${R}"
+		ui "  $(L "The password is unchanged; data and profiles are kept." "Пароль прежний, данные и профили сохранены.")"
+		ui "  ${D}$(L "swift admin reset issues a new one." "Новый пароль выдаст команда swift admin reset.")${R}"
 	fi
 	if [ -z "$DOMAIN" ]; then
-		ui "  ${D}Браузер предупредит о самоподписанном сертификате: это ожидаемо.${R}"
+		ui "  ${D}$(L "The browser will warn about a self-signed certificate: this is expected." "Браузер предупредит о самоподписанном сертификате: это ожидаемо.")${R}"
 	fi
 	ui ""
-	ui "  Если у хостера есть свой файрвол, откройте в нём порты:"
+	ui "  $(L "If your host has its own firewall, open these ports there:" "Если у хостера есть свой файрвол, откройте в нём порты:")"
 	ui "  ${B}$(port_list)${R}"
 	ui ""
 }
 
 do_update() {
-	header "Обновление"
+	installed_lang
+	header "$(L "Update" "Обновление")"
 	start_log
 	check_system
-	[ -x "$BIN" ] || die "Swift не установлен" "Запустите установщик без --update."
+	[ -x "$BIN" ] || die "$(L "Swift is not installed" "Swift не установлен")" "$(L "Run the installer without --update." "Запустите установщик без --update.")"
 	progress_start
-	step 5 "Резервная копия базы"
+	step 5 "$(L "Backing up the database" "Резервная копия базы")"
 	ensure_tools
 	TMP="$(mktemp -d)"
 	local backup
 	backup="$DATA/backup-$(date +%Y%m%d-%H%M%S).db"
 	"$BIN" db backup "$backup" -config "$ETC/swift.toml"
-	step 15 "Загрузка Swift"
+	step 15 "$(L "Downloading Swift" "Загрузка Swift")"
 	download_swift
-	step 45 "Загрузка Xray"
+	step 45 "$(L "Downloading Xray" "Загрузка Xray")"
 	download_xray
-	step 75 "Установка файлов"
+	step 75 "$(L "Installing files" "Установка файлов")"
 	systemctl stop swift
 	install_binaries
 	write_unit
-	step 90 "Запуск панели"
+	step 90 "$(L "Starting the panel" "Запуск панели")"
 	start_service
-	step 100 "Готово"
+	step 100 "$(L "Done" "Готово")"
 	progress_stop
 	ui ""
 	local v
 	v="$("$BIN" version)"
-	box "Swift обновлён" \
+	box "$(L "Swift is updated" "Swift обновлён")" \
 		"Swift|$(printf '%s\n' "$v" | awk '{print $2}')" \
 		"Xray|$(printf '%s\n' "$v" | awk '{print $4}')" \
-		"Копия БД|$backup"
+		"$(L "DB backup" "Копия БД")|$backup"
 	ui ""
 }
 
 do_uninstall() {
-	header "Удаление"
+	installed_lang
+	header "$(L "Removal" "Удаление")"
 	start_log
 	progress_start
-	step 30 "Остановка панели"
+	step 30 "$(L "Stopping the panel" "Остановка панели")"
 	if [ -f "$UNIT" ]; then
 		systemctl disable --now swift || true
 		rm -f "$UNIT"
 		systemctl daemon-reload
 	fi
-	step 70 "Удаление файлов"
+	step 70 "$(L "Removing files" "Удаление файлов")"
 	rm -f "$BIN" "$SYSCTL"
 	rm -rf "$LIB"
 	if [ "$PURGE" -eq 1 ]; then rm -rf "$ETC" "$DATA"; fi
-	step 100 "Готово"
+	step 100 "$(L "Done" "Готово")"
 	progress_stop
 	ui ""
 	if [ "$PURGE" -eq 1 ]; then
-		ui "  ${B}Swift удалён вместе с данными.${R}"
+		ui "  ${B}$(L "Swift is removed together with its data." "Swift удалён вместе с данными.")${R}"
 	else
-		ui "  ${B}Swift удалён.${R}"
-		ui "  ${D}База и настройки остались в $DATA и $ETC.${R}"
-		ui "  ${D}Удалить и их: флаги --uninstall --purge.${R}"
+		ui "  ${B}$(L "Swift is removed." "Swift удалён.")${R}"
+		ui "  ${D}$(L "The database and settings remain in $DATA and $ETC." "База и настройки остались в $DATA и $ETC.")${R}"
+		ui "  ${D}$(L "To remove them too: --uninstall --purge." "Удалить и их: флаги --uninstall --purge.")${R}"
 	fi
 	ui ""
 }
@@ -547,4 +621,7 @@ main() {
 	esac
 }
 
-main "$@"
+# Sourcing the script (tests) defines the functions without running anything.
+if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then
+	main "$@"
+fi

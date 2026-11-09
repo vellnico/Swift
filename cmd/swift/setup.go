@@ -25,8 +25,12 @@ func setup(args []string, stdout io.Writer) error {
 	address := fs.String("address", "", "public IP address of the server")
 	domain := fs.String("domain", "", "domain pointing at the server (Let's Encrypt)")
 	noProfiles := fs.Bool("no-profiles", false, "do not create the default profiles")
+	lang := fs.String("lang", "", "default panel language: en or ru")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *lang != "" && !service.ValidLanguage(*lang) {
+		return fmt.Errorf("invalid -lang %q: use en or ru", *lang)
 	}
 	ctx := context.Background()
 	cfg, st, err := openStore(ctx, *cfgPath)
@@ -35,6 +39,12 @@ func setup(args []string, stdout io.Writer) error {
 	}
 	defer st.Close()
 
+	// applied on every run, so running the installer again can switch the language
+	if *lang != "" {
+		if err := st.SetSetting(ctx, "language", *lang); err != nil {
+			return err
+		}
+	}
 	if done, _ := st.Setting(ctx, "setup_done"); done == "1" {
 		fmt.Fprintln(stdout, "Swift is already set up; nothing to do.")
 		return nil

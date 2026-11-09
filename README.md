@@ -1,80 +1,81 @@
 # Swift
 
-[English](README.en.md)
+[Русский](README.ru.md)
 
-Лёгкая веб-панель для одного VPN-сервера на ядре [Xray-core](https://github.com/XTLS/Xray-core). Поставил одной командой, раздал близким ключи — и всё.
+A lightweight web panel for a single VPN server running [Xray-core](https://github.com/XTLS/Xray-core). Install it with one command, hand out keys to family and friends, done.
 
-![Обзор](docs/screenshots/dashboard-ru.png)
+![Overview](docs/screenshots/dashboard-en.png)
 
-- **Протоколы:** VLESS Reality (TCP + Vision и XHTTP) и Hysteria2 с обфускацией Salamander. Профиль создаётся одной кнопкой: ключи, порт и цель Reality подбираются сами.
-- **Люди и подписки:** у каждого человека своя ссылка подписки и QR-код. Подписка подстраивается под приложение — Hiddify, Happ, v2rayNG, v2RayTun. Добавление и отключение — без перезапуска Xray.
-- **Российские сайты напрямую:** один переключатель, правила доезжают до приложений через подписку.
-- **Сертификаты:** самоподписанный сразу после установки или Let's Encrypt для своего домена с автопродлением.
-- **Живой обзор:** процессор, память и сеть без опроса, статус Xray, журнал событий.
-- **Обновление Xray из панели:** проверка SHA256, проверка конфига новой версией и автоматический откат, если ядро не поднялось.
-- **Один бинарник:** Go без CGO, SQLite внутри, интерфейс встроен. Около 20 МБ памяти.
+- **Protocols:** VLESS Reality (TCP + Vision and XHTTP) and Hysteria2 with Salamander obfuscation. A profile is one click away: keys, port and Reality target are picked for you.
+- **People and subscriptions:** everyone gets their own subscription link and QR code. The subscription adapts to the app — Hiddify, Happ, v2rayNG, v2RayTun. Adding and disabling people never restarts Xray.
+- **Russian sites direct:** one switch, and the rules reach the apps through the subscription.
+- **Certificates:** self-signed right after install, or Let's Encrypt for your own domain with automatic renewal.
+- **Live overview:** CPU, memory and network without polling, Xray status, event journal.
+- **Xray updates from the panel:** SHA256 check, config check with the new version and an automatic rollback if the core does not come up.
+- **One binary:** Go without CGO, SQLite inside, the UI embedded. About 20 MB of memory.
 
-## Установка
+## Install
 
-Нужен сервер с Debian 11+ или Ubuntu 20.04+ (amd64 или arm64), systemd и root.
+You need a Debian 11+ or Ubuntu 20.04+ server (amd64 or arm64) with systemd and root.
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vellnico/Swift/main/scripts/install.sh)
 ```
 
-Установщик спросит про домен (можно пропустить), скачает Swift и Xray с проверкой SHA256, создаст профили VLESS Reality на 443/tcp и Hysteria2 на 443/udp, включит BBR, откроет порты в ufw/firewalld и запустит службу `swift`. В конце он покажет адрес панели, логин и пароль — сохраните пароль, он показывается один раз.
+The installer first asks for the language (English or Russian) — it is used by the installer and becomes the panel's default language. Then it asks about a domain (you can skip it), downloads Swift and Xray with SHA256 checks, creates VLESS Reality on 443/tcp and Hysteria2 on 443/udp, enables BBR, opens the ports in ufw/firewalld and starts the `swift` service. At the end it prints the panel address, login and password — save the password, it is shown once.
 
-Флаги:
+Flags:
 
-| Флаг | Что делает |
+| Flag | What it does |
 |---|---|
-| `--domain <имя>` | сразу выпустить сертификат Let's Encrypt для домена |
-| `--address <ip>` | публичный IP, если он не определился сам |
-| `--version <тег>` | поставить конкретный релиз |
-| `--update` | обновить Swift и Xray; перед этим база копируется в `/var/lib/swift/backup-<дата>.db` |
-| `--uninstall [--purge]` | удалить Swift; с `--purge` — вместе с базой и настройками |
-| `--no-bbr` | не трогать настройки TCP |
-| `--non-interactive` | ничего не спрашивать |
+| `--lang en\|ru` | installer and panel language without the question; English with `--non-interactive` |
+| `--domain <name>` | issue a Let's Encrypt certificate for the domain right away |
+| `--address <ip>` | public IP, if it cannot be detected |
+| `--version <tag>` | install a specific release |
+| `--update` | update Swift and Xray; the database is copied to `/var/lib/swift/backup-<date>.db` first |
+| `--uninstall [--purge]` | remove Swift; with `--purge` also the database and settings |
+| `--no-bbr` | leave TCP settings alone |
+| `--non-interactive` | ask nothing |
 
-Повторный запуск установщика ничего не ломает: пароль, порты и профили остаются прежними.
+Running the installer again breaks nothing: the password, ports and profiles stay as they are.
 
-## Как пользоваться
+## Usage
 
-1. Откройте адрес панели из итоговой рамки установщика. Браузер предупредит о самоподписанном сертификате — это ожидаемо; выпустите сертификат для домена в «Настройках», чтобы предупреждение исчезло.
-2. В разделе «Люди» добавьте человека: появится QR-код и ссылка подписки.
-3. Человек открывает ссылку на телефоне — страница подписки предложит добавить её в Hiddify, Happ или v2rayNG одной кнопкой.
+1. Open the panel address from the installer's final box. The browser warns about the self-signed certificate — that is expected; issue a certificate for a domain in Settings to get rid of the warning.
+2. In People, add a person: a QR code and a subscription link appear.
+3. The person opens the link on their phone — the subscription page offers to add it to Hiddify, Happ or v2rayNG with one tap.
 
 | | | |
 |---|---|---|
-| ![Профили](docs/screenshots/profiles-ru.png) | ![Люди](docs/screenshots/users-ru.png) | ![Настройки](docs/screenshots/settings-ru.png) |
-| ![Обзор на телефоне](docs/screenshots/dashboard-mobile-ru.png) | ![Маршруты на телефоне](docs/screenshots/routing-mobile-ru.png) | ![Страница подписки](docs/screenshots/sub-mobile-ru.png) |
+| ![Profiles](docs/screenshots/profiles-en.png) | ![People](docs/screenshots/users-en.png) | ![Settings](docs/screenshots/settings-en.png) |
+| ![Overview on a phone](docs/screenshots/dashboard-mobile-en.png) | ![Routing on a phone](docs/screenshots/routing-mobile-en.png) | ![Subscription page](docs/screenshots/sub-mobile-en.png) |
 
-### Командная строка
+### Command line
 
 ```
-swift admin show          адрес панели и логин
-swift admin reset         новый пароль администратора
-swift db backup <файл>    копия базы
-swift version             версии Swift и Xray
+swift admin show          panel address and login
+swift admin reset         new administrator password
+swift db backup <file>    copy of the database
+swift version             Swift and Xray versions
 ```
 
-Файлы: бинарник `/usr/local/bin/swift`, Xray и geo-файлы `/usr/local/lib/swift/`, настройки `/etc/swift/swift.toml`, база и сертификаты `/var/lib/swift/`. Журнал службы: `journalctl -u swift`.
+Files: binary `/usr/local/bin/swift`, Xray and geo files `/usr/local/lib/swift/`, settings `/etc/swift/swift.toml`, database and certificates `/var/lib/swift/`. Service log: `journalctl -u swift`.
 
-## Безопасность
+## Security
 
-- Панель отвечает только по секретному пути на случайном порту, на всё остальное — пустой 404.
-- Пароль хранится как argon2id, после пяти неудачных входов за 10 минут адрес блокируется на 15 минут.
-- Cookie `HttpOnly`, `Secure`, `SameSite=Strict`, защита от CSRF, строгая CSP.
-- Xray не пишет журнал доступа: ни IP, ни посещённые сайты не сохраняются.
+- The panel answers only on a secret path on a random port; everything else gets an empty 404.
+- The password is stored as argon2id; five failed sign-ins within 10 minutes block the address for 15 minutes.
+- `HttpOnly`, `Secure`, `SameSite=Strict` cookies, CSRF protection, strict CSP.
+- Xray keeps no access log: neither IP addresses nor visited sites are stored.
 
-## Разработка
+## Development
 
-Нужны Go и Node.js.
+You need Go and Node.js.
 
 ```bash
-make xray     # скачать зафиксированную версию Xray для тестов
-make dev      # Go с перезагрузкой и Vite dev server
+make xray     # download the pinned Xray version for tests
+make dev      # Go with live reload plus the Vite dev server
 make lint test build
 ```
 
-Спецификация и план работ — [docs/SPEC.md](docs/SPEC.md).
+Specification and work plan: [docs/SPEC.md](docs/SPEC.md).

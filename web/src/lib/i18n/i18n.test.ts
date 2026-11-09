@@ -21,10 +21,13 @@ describe('i18n', () => {
   });
 
   it('detects the locale', () => {
-    expect(detectLocale('en', ['ru-RU'])).toBe('en');
-    expect(detectLocale(null, ['de-DE', 'en-US'])).toBe('en');
-    expect(detectLocale(null, ['de'])).toBe('ru');
-    expect(detectLocale('xx', ['ru'])).toBe('ru');
+    expect(detectLocale('en', 'ru')).toBe('en');
+    expect(detectLocale('ru', 'en')).toBe('ru');
+    expect(detectLocale(null, 'ru')).toBe('ru');
+    expect(detectLocale(null, 'ru-RU')).toBe('ru');
+    expect(detectLocale('xx', 'de')).toBe('en');
+    expect(detectLocale(null, '')).toBe('en');
+    expect(detectLocale(null, undefined)).toBe('en');
   });
 
   it('never shouts in caps', () => {

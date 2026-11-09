@@ -120,3 +120,40 @@ func TestPanelAddressGeneratedOnceAndPersisted(t *testing.T) {
 		t.Fatalf("config override ignored: %d %q", p, s)
 	}
 }
+
+func TestSetupStoresLanguageOnEveryRun(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SWIFT_DATA_DIR", dir)
+	t.Setenv("SWIFT_XRAY_BIN", filepath.Join(dir, "no-xray"))
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(dir, "swift.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a finished setup must still accept a new language
+	if err := st.SetSetting(ctx, "setup_done", "1"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	var out bytes.Buffer
+	if err := run([]string{"setup", "-config", "", "-lang", "de"}, &out, &out); err == nil {
+		t.Fatal("unknown language accepted")
+	}
+	if err := run([]string{"setup", "-config", "", "-lang", "ru"}, &out, &out); err != nil {
+		t.Fatalf("setup: %v %s", err, out.String())
+	}
+	if _, err := run2(t, "admin", "reset", "-config", ""); err != nil {
+		t.Fatal(err)
+	}
+	show, err := run2(t, "admin", "show", "-config", "")
+	if err != nil || !strings.Contains(show, "Language: ru\n") {
+		t.Fatalf("admin show: %v %q", err, show)
+	}
+}
+
+func run2(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	var out bytes.Buffer
+	err := run(args, &out, &out)
+	return out.String(), err
+}

@@ -38,9 +38,11 @@ docker cp "$ROOT/scripts/install.sh" "$NAME:/opt/install.sh"
 
 run_installer() { ct bash /opt/install.sh --non-interactive --no-bbr --from-dir /opt/dist --address 127.0.0.1 "$@"; }
 
+panel_url() { ct swift admin show -config /etc/swift/swift.toml | sed -n 's/^URL: *//p'; }
+
 wait_panel() {
 	local url
-	url="$(ct swift admin show -config /etc/swift/swift.toml | sed -n 's/^URL: *//p')"
+	url="$(panel_url)"
 	for _ in $(seq 30); do
 		if ct curl -ksf -o /dev/null "$url"; then return 0; fi
 		sleep 1
@@ -48,30 +50,44 @@ wait_panel() {
 	fail "panel does not answer at $url"
 }
 
+panel_lang() {
+	ct curl -ksf "$(panel_url)" | grep -q "<html lang=\"$1\">" || fail "panel is not served in $1"
+}
+
+echo "== os-release does not leak into the installer on $BASE"
+# VERSION from /etc/os-release once replaced the release tag ("swift_12 (bookworm)_linux_amd64.tar.gz")
+# shellcheck disable=SC2016 # expanded inside the container
+ct bash -c 'source /opt/install.sh; check_system; [ "$SWIFT_VERSION" = latest ]' || fail "check_system changed SWIFT_VERSION"
+# shellcheck disable=SC2016
+ct bash -c 'source /opt/install.sh; release_tag; case "$TAG" in v[0-9]*) ;; *) exit 1 ;; esac' || fail "latest release tag not resolved"
+
 echo "== clean install on $BASE"
 out="$(run_installer)" || fail "install exited with an error: $out"
 printf '%s\n' "$out"
-grep -q 'Пароль *[^ ]\{20\} *│$' <<<"$out" || fail "credentials box missing"
-grep -q '100%  Готово' <<<"$out" || fail "progress did not reach 100%"
+grep -q 'Password *[^ ]\{20\} *│$' <<<"$out" || fail "credentials box missing"
+grep -q '100%  Done' <<<"$out" || fail "progress did not reach 100%"
 grep -qE 'apt|Reading|Selecting|Profile ' <<<"$out" && fail "installer leaked command output to the screen"
 ct systemctl is-active --quiet swift || fail "swift.service is not active"
 wait_panel
+panel_lang en
 ct pgrep -f /usr/local/lib/swift/xray >/dev/null || fail "xray is not running"
 ports_before="$(ct swift ports -config /etc/swift/swift.toml)"
 grep -q '^tcp 443$' <<<"$ports_before" || fail "no VLESS Reality on 443/tcp"
 grep -q '^udp 443$' <<<"$ports_before" || fail "no Hysteria2 on 443/udp"
 login="$(ct swift admin show -config /etc/swift/swift.toml | sed -n 's/^Login: *//p')"
 
-echo "== repeated install"
-out="$(run_installer)" || fail "second install failed: $out"
-grep -q 'Swift уже установлен' <<<"$out" || fail "second install did not report an existing setup"
+echo "== repeated install in Russian"
+out="$(run_installer --lang ru)" || fail "second install failed: $out"
+grep -q 'Swift уже установлен' <<<"$out" || fail "second install did not report an existing setup in Russian"
 grep -q 'Пароль *[^ ]\{20\} *│$' <<<"$out" && fail "second install printed a new password"
 [ "$(ct swift ports -config /etc/swift/swift.toml)" = "$ports_before" ] || fail "second install changed ports"
 ct swift admin show -config /etc/swift/swift.toml | grep -q "^Login: $login$" || fail "second install changed the login"
 wait_panel
+panel_lang ru
 
-echo "== update"
-run_installer --update || fail "--update failed"
+echo "== update keeps the installed language"
+out="$(run_installer --update)" || fail "--update failed: $out"
+grep -q 'Swift обновлён' <<<"$out" || fail "--update did not use the installed language"
 ct sh -c 'ls /var/lib/swift/backup-*.db' >/dev/null || fail "--update made no backup"
 ct systemctl is-active --quiet swift || fail "swift.service is not active after --update"
 wait_panel

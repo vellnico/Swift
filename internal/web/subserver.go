@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/vellnico/swift/internal/qr"
@@ -148,8 +149,9 @@ type pageLink struct {
 	URL  string `json:"url"`
 }
 
-// PageLang picks ru or en from Accept-Language (SPEC 7.4).
-func PageLang(acceptLanguage string) string {
+// PageLang picks ru or en from Accept-Language (SPEC 7.4); fallback is the
+// panel language chosen at install time.
+func PageLang(acceptLanguage, fallback string) string {
 	for _, part := range strings.Split(acceptLanguage, ",") {
 		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
 		switch {
@@ -159,7 +161,24 @@ func PageLang(acceptLanguage string) string {
 			return "en"
 		}
 	}
-	return "en"
+	if service.ValidLanguage(fallback) {
+		return fallback
+	}
+	return service.DefaultLanguage
+}
+
+var htmlLangRe = regexp.MustCompile(`<html lang="[A-Za-z-]*">`)
+
+// setHTMLLang rewrites the lang attribute of the root element.
+func setHTMLLang(html []byte, lang string) []byte {
+	loc := htmlLangRe.FindIndex(html)
+	if loc == nil {
+		return html
+	}
+	out := make([]byte, 0, len(html)+4)
+	out = append(out, html[:loc[0]]...)
+	out = append(out, `<html lang="`+lang+`">`...)
+	return append(out, html[loc[1]:]...)
 }
 
 func (s *SubServer) page(w http.ResponseWriter, r *http.Request, u store.User, subURL string, req sub.Request) {
@@ -169,7 +188,7 @@ func (s *SubServer) page(w http.ResponseWriter, r *http.Request, u store.User, s
 		_, _ = w.Write([]byte(subURL + "\n"))
 		return
 	}
-	lang := PageLang(r.Header.Get("Accept-Language"))
+	lang := PageLang(r.Header.Get("Accept-Language"), service.Language(r.Context(), s.Store))
 	all := s.Dict(lang)
 	strs := map[string]string{}
 	for k, v := range all {
@@ -190,7 +209,7 @@ func (s *SubServer) page(w http.ResponseWriter, r *http.Request, u store.User, s
 	}
 	block := []byte(`<script id="swift-data" type="application/json">` + string(js) + `</script>`)
 	html := bytes.Replace(tmpl, []byte("<!--swift-data-->"), block, 1)
-	html = bytes.Replace(html, []byte(`<html lang="ru">`), []byte(`<html lang="`+lang+`">`), 1)
+	html = setHTMLLang(html, lang)
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")

@@ -38,7 +38,7 @@ func main() {
 const usage = `Usage:
   swift serve [-config path]
   swift admin show|reset [-config path]
-  swift setup [-address ip] [-domain name] [-config path]
+  swift setup [-address ip] [-domain name] [-lang en|ru] [-config path]
   swift db backup <file> [-config path]
   swift ports [-config path]
   swift version [--xray]

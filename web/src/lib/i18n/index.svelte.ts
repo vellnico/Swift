@@ -2,32 +2,39 @@ import ru from './ru.json';
 import en from './en.json';
 
 export type Locale = 'ru' | 'en';
-export type Key = keyof typeof ru;
+export type Key = keyof typeof en;
 type Dict = Record<string, string>;
 
 export const dictionaries: Record<Locale, Dict> = { ru, en };
-export const locales: Locale[] = ['ru', 'en'];
+export const locales: Locale[] = ['en', 'ru'];
+export const defaultLocale: Locale = 'en';
 
 const STORAGE_KEY = 'swift.locale';
 
-export function detectLocale(stored: string | null, languages: readonly string[]): Locale {
-  if (stored === 'ru' || stored === 'en') return stored;
-  for (const lang of languages) {
-    const base = lang.toLowerCase().split('-')[0];
-    if (base === 'ru' || base === 'en') return base;
-  }
-  return 'ru';
+function isLocale(v: string | null | undefined): v is Locale {
+  return v === 'ru' || v === 'en';
+}
+
+/**
+ * The browser's own choice wins; otherwise the language picked at install time,
+ * which the server writes into <html lang>; otherwise English.
+ */
+export function detectLocale(stored: string | null, pageLang: string | null | undefined): Locale {
+  if (isLocale(stored)) return stored;
+  const base = pageLang?.toLowerCase().split('-')[0];
+  if (isLocale(base)) return base;
+  return defaultLocale;
 }
 
 function initial(): Locale {
-  if (typeof window === 'undefined') return 'ru';
+  if (typeof window === 'undefined') return defaultLocale;
   let stored: string | null;
   try {
     stored = localStorage.getItem(STORAGE_KEY);
   } catch {
     stored = null;
   }
-  return detectLocale(stored, navigator.languages ?? [navigator.language]);
+  return detectLocale(stored, document.documentElement.lang);
 }
 
 export const i18n = $state({ locale: initial() });
@@ -42,9 +49,9 @@ export function setLocale(locale: Locale) {
   if (typeof document !== 'undefined') document.documentElement.lang = locale;
 }
 
-/** Translate with {name} placeholders. Missing keys fall back to Russian, then to the key. */
+/** Translate with {name} placeholders. Missing keys fall back to English, then to the key. */
 export function translate(locale: Locale, key: string, params?: Record<string, string | number>): string {
-  let s = dictionaries[locale][key] ?? dictionaries.ru[key] ?? key;
+  let s = dictionaries[locale][key] ?? dictionaries[defaultLocale][key] ?? key;
   if (params) {
     for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, String(v));
   }
