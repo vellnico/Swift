@@ -148,6 +148,10 @@ func (g *UpdateGuard) Run(ctx context.Context) error {
 	}
 	g.logf("watching the update %s -> %s", p.From, p.To)
 	base, baseErr := g.Systemd.NRestarts(ctx, g.Unit)
+	last := base
+	if baseErr != nil {
+		g.logf("cannot read restarts of %s: %v", g.Unit, baseErr)
+	}
 	deadline := time.Now().Add(g.Timeout)
 	for {
 		var confirmed string
@@ -160,6 +164,10 @@ func (g *UpdateGuard) Run(ctx context.Context) error {
 			return g.withStore(ctx, func(st *store.Store) error { return st.SetSetting(ctx, swiftPendingKey, "") })
 		}
 		if n, err := g.Systemd.NRestarts(ctx, g.Unit); baseErr == nil && err == nil {
+			if n != last {
+				g.logf("%s restarts: %d", g.Unit, n)
+				last = n
+			}
 			// a manual `systemctl restart` resets the counter: count from the lowest value seen
 			base = min(base, n)
 			if n-base >= g.MaxRestarts {
@@ -188,7 +196,7 @@ func swapBack(path string) error {
 	return os.Rename(path+".bak", path)
 }
 
-func copyFile(src, dst string) error {
+func restoreFile(src, dst string) error {
 	b, err := os.ReadFile(src)
 	if err != nil {
 		return err
@@ -221,7 +229,7 @@ func (g *UpdateGuard) rollback(ctx context.Context, p PendingUpdate, reason stri
 		for _, suffix := range []string{"-wal", "-shm"} {
 			_ = os.Remove(g.DBPath + suffix)
 		}
-		if err := copyFile(p.Backup, g.DBPath); err != nil {
+		if err := restoreFile(p.Backup, g.DBPath); err != nil {
 			errs = append(errs, fmt.Errorf("restore database: %w", err))
 		}
 	}

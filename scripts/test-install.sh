@@ -111,6 +111,7 @@ for _ in $(seq 90); do
 	sleep 1
 done
 if [ "$rolled" != 1 ]; then
+	ct systemctl show swift -p NRestarts -p ActiveState -p SubState -p Result >&2 || true
 	ct journalctl -u swift-update-guard-test --no-pager -n 30 >&2 || true
 	fail "the broken update was not rolled back"
 fi
