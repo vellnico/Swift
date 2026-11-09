@@ -97,7 +97,8 @@ echo "== a broken update rolls back by itself"
 # what the panel leaves behind right before restarting into a new version
 ct swift db backup /var/lib/swift/pre-update.db -config /etc/swift/swift.toml >/dev/null
 ct cp /usr/local/bin/swift /usr/local/bin/swift.bak
-ct sh -c 'printf "#!/bin/sh\nexit 1\n" > /usr/local/bin/swift && chmod 755 /usr/local/bin/swift'
+# the running binary cannot be overwritten in place; the panel renames it too
+ct sh -c 'printf "#!/bin/sh\nexit 1\n" > /usr/local/bin/swift.new && chmod 755 /usr/local/bin/swift.new && mv -f /usr/local/bin/swift.new /usr/local/bin/swift'
 ct sqlite3 /var/lib/swift/swift.db "INSERT OR REPLACE INTO settings(key, value) VALUES ('swift_update_pending', '{\"from\":\"0.0.1\",\"to\":\"9.9.9\",\"backup\":\"/var/lib/swift/pre-update.db\"}')"
 ct systemd-run --unit swift-update-guard-test --collect /usr/local/bin/swift.bak update-guard -config /etc/swift/swift.toml
 ct systemctl restart swift || true

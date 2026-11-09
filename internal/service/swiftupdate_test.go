@@ -128,9 +128,10 @@ func TestSwiftUpdateSwapsBinaryAndRestarts(t *testing.T) {
 type fakeSystemd struct {
 	mu       sync.Mutex
 	restarts int
-	grow     bool // every NRestarts call sees one more restart
 	calls    []string
 	fail     error
+	// grow: every NRestarts call sees one more restart
+	grow bool
 }
 
 func (f *fakeSystemd) NRestarts(context.Context, string) (int, error) {
