@@ -328,3 +328,12 @@ func (a *app) startXray(ctx context.Context) {
 	go a.sup.Run(ctx)
 	go a.updater.RunChecks(ctx)
 }
+
+// healthy is what a freshly updated panel must show before it confirms the
+// update: it serves (this process runs) and Xray is up, if it is installed.
+func (a *app) healthy() bool {
+	if _, err := os.Stat(a.sup.Bin); err != nil {
+		return true
+	}
+	return a.sup.Status().Status == xray.StatusRunning
+}
