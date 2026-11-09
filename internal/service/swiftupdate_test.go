@@ -130,6 +130,7 @@ type fakeSystemd struct {
 	restarts int
 	calls    []string
 	fail     error
+	state    string
 	// grow: every NRestarts call sees one more restart
 	grow bool
 }
@@ -141,6 +142,12 @@ func (f *fakeSystemd) NRestarts(context.Context, string) (int, error) {
 		f.restarts++
 	}
 	return f.restarts, nil
+}
+
+func (f *fakeSystemd) ActiveState(context.Context, string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.state, nil
 }
 
 func (f *fakeSystemd) record(s string) error {

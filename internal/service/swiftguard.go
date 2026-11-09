@@ -60,6 +60,8 @@ func writeJSONSetting(ctx context.Context, st *store.Store, key string, v any) e
 // Systemd runs the systemctl and systemd-run commands the guard needs; mockable.
 type Systemd interface {
 	NRestarts(ctx context.Context, unit string) (int, error)
+	// ActiveState is "active", "activating", "failed" and so on.
+	ActiveState(ctx context.Context, unit string) (string, error)
 	Stop(ctx context.Context, unit string) error
 	Start(ctx context.Context, unit string) error
 	// RunTransient starts argv as its own unit, outside the panel's cgroup, so
@@ -84,6 +86,11 @@ func (ExecSystemd) NRestarts(ctx context.Context, unit string) (int, error) {
 		return 0, err
 	}
 	return strconv.Atoi(strings.TrimSpace(out))
+}
+
+func (ExecSystemd) ActiveState(ctx context.Context, unit string) (string, error) {
+	out, err := runCmd(ctx, "systemctl", "show", "-p", "ActiveState", "--value", unit)
+	return strings.TrimSpace(out), err
 }
 
 func (ExecSystemd) Stop(ctx context.Context, unit string) error {
@@ -173,6 +180,10 @@ func (g *UpdateGuard) Run(ctx context.Context) error {
 			if n-base >= g.MaxRestarts {
 				return g.rollback(ctx, p, "crash_loop")
 			}
+		}
+		// systemd gives up on a unit that fails too fast and leaves it failed
+		if s, err := g.Systemd.ActiveState(ctx, g.Unit); err == nil && s == "failed" {
+			return g.rollback(ctx, p, "crash_loop")
 		}
 		if time.Now().After(deadline) {
 			return g.rollback(ctx, p, "not_confirmed")

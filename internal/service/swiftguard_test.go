@@ -152,3 +152,14 @@ func TestAutoUpdateSkipsARolledBackRelease(t *testing.T) {
 		t.Fatal("auto-update installed a release that was rolled back")
 	}
 }
+
+func TestGuardRollsBackAFailedUnit(t *testing.T) {
+	sd := &fakeSystemd{state: "failed"}
+	g, dir := guardEnv(t, sd)
+	if err := g.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, filepath.Join(dir, "swift")) != "old" {
+		t.Fatal("a unit systemd gave up on was not rolled back")
+	}
+}
