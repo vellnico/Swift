@@ -1,0 +1,19 @@
+# Build output
+/bin/
+/.cache/
+/tmp/
+node_modules/
+
+# Local data
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
