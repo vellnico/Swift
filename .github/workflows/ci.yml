@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        xray: ["", "26.6.27", "26.3.27"]
+        xray: ["", "26.9.9", "26.7.28", "26.7.11"]
     name: e2e (xray ${{ matrix.xray || 'pinned' }})
     steps:
       - uses: actions/checkout@v4
