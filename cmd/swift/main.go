@@ -17,11 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/store"
-	"github.com/vellnico/swift/internal/web"
-	webassets "github.com/vellnico/swift/web"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -93,20 +90,18 @@ func serve(cfgPath string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	srv := web.New(web.Deps{
-		PanelPath: path,
-		Assets:    webassets.Panel(),
-		Log:       log,
-		Store:     st,
-		Auth:      auth.NewManager(st),
-	})
+	a, err := newApp(ctx, cfg, st, log, path)
+	if err != nil {
+		return err
+	}
 	if _, err := st.FirstAdmin(ctx); errors.Is(err, store.ErrNotFound) {
 		fmt.Fprintln(stdout, "No administrator yet: run `swift admin reset` to create one.")
 	}
 	go sessionGC(ctx, st, log)
+	a.startXray(ctx)
 	hs := &http.Server{
 		Addr:              net.JoinHostPort(cfg.Listen, strconv.Itoa(port)),
-		Handler:           srv.Handler(),
+		Handler:           a.srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}

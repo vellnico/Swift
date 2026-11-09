@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/vellnico/swift/internal/auth"
+	"github.com/vellnico/swift/internal/bus"
 	"github.com/vellnico/swift/internal/store"
 )
 
@@ -22,6 +23,7 @@ type Deps struct {
 	Store     *store.Store
 	Auth      *auth.Manager
 	Limiter   *auth.Limiter
+	Bus       *bus.Bus
 	// OnEvent is called after a journal entry is written (used to push it over SSE).
 	OnEvent func(store.Event)
 }
@@ -45,6 +47,7 @@ func New(d Deps) *Server {
 	s.api.HandleFunc("POST /api/auth/login", s.login)
 	s.Handle("POST /api/auth/logout", s.logout)
 	s.Handle("POST /api/auth/password", s.changePassword)
+	s.Handle("GET /api/events", s.events)
 	return s
 }
 

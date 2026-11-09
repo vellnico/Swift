@@ -11,7 +11,7 @@ STATICCHECK_VERSION := 2026.2.2
 
 export CGO_ENABLED := 0
 
-.PHONY: dev build web-deps web go-build test lint xray golden clean
+.PHONY: dev build web-deps web go-build test integration lint xray golden clean
 
 web/node_modules/.package-lock.json: web/package.json web/package-lock.json
 	cd web && $(NPM) ci --no-fund --no-audit
@@ -30,6 +30,10 @@ build: web go-build
 test: web-deps
 	$(GO) test $(GO_PKGS)
 	cd web && $(NPM) test
+
+# Integration tests start the real xray from .cache/xray (make xray).
+integration:
+	$(GO) test -count=1 -tags integration $(GO_PKGS)
 
 lint: web-deps
 	$(GO) vet $(GO_PKGS)

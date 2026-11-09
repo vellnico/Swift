@@ -8,6 +8,7 @@
   import { navigate, router } from './lib/router.svelte';
   import { dur, fadeShift, section } from './lib/motion';
   import { checkSession, session } from './lib/session.svelte';
+  import { connectLive, disconnectLive } from './lib/state.svelte';
   import ToastHost from './lib/ui/ToastHost.svelte';
   import Sidebar from './shell/Sidebar.svelte';
   import BottomNav from './shell/BottomNav.svelte';
@@ -26,6 +27,11 @@
 
   $effect(() => {
     document.documentElement.lang = i18n.locale;
+  });
+
+  $effect(() => {
+    if (session.status === 'authed') connectLive();
+    else disconnectLive();
   });
 
   function signedIn(rect: DOMRect | null) {

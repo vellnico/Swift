@@ -448,7 +448,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/<owner>/swift/main/scripts/i
 - [x] 0. Каркас
 - [x] 1. Дизайн-система и оболочка UI
 - [x] 2. Авторизация
-- [ ] 3. Xray: генерация, supervisor, API
+- [x] 3. Xray: генерация, supervisor, API
 - [ ] 4. Профили
 - [ ] 5. Пользователи и подписки
 - [ ] 6. Дашборд и метрики
@@ -596,3 +596,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/<owner>/swift/main/scripts/i
 | 2026-11-09 | 2 | CSRF-проверка (double-submit) действует и для `POST /api/auth/login`: токен-cookie выдаётся вместе с `index.html` и на `GET /api/auth/session`. |
 | 2026-11-09 | 2 | `swift serve` никогда не печатает пароль; без администратора выводит подсказку `swift admin reset`. Пароль выдаёт только `admin reset` — в терминал, не в журнал. Сброс пароля завершает все сессии. |
 | 2026-11-09 | 2 | Сессия продлевается «скользяще» не чаще раза в час (запись в БД, когда до конца осталось меньше 14 дн − 1 ч). Новый пароль из настроек — не короче 12 символов. `events.ts` хранится в миллисекундах. |
+| 2026-11-09 | 3 | Схема сверена с исходниками Xray 26.10.31. Hysteria2-сервер — `protocol: "hysteria"` с `settings.version: 2` и `clients[].auth`, транспорт `network: "hysteria"` + `hysteriaSettings.version: 2`, TLS с ALPN `h3`. Salamander задаётся в `streamSettings.finalmask.udp: [{type: "salamander", settings: {password}}]`. VLESS Vision — `network: "raw"`, XHTTP — `network: "xhttp"` + `xhttpSettings {path, mode}`. Reality — поле `target` (бывший `dest`). API слушает через `api.listen`, отдельный dokodemo-inbound не нужен. |
+| 2026-11-09 | 3 | `github.com/xtls/xray-core` подключён псевдоверсией коммита релиза v26.10.31 (`a4a3dff`): теги Xray несовместимы с semver-модулями Go. Используются только `app/proxyman/command`, `common/protocol`, `common/serial`, `proxy/vless`, `proxy/hysteria/account`. |
+| 2026-11-09 | 3 | Базовая часть конфига: `log.access: "none"` (IP и пользователи не пишутся), `geoip:private` → `block`, имена пользователей в Xray не попадают — только `u<id>`; inbound-теги `p<id>`. Порт API выбирается свободным на 127.0.0.1 один раз и хранится в `settings.xray_api_port`. |
+| 2026-11-09 | 3 | Интеграционный тест (`make integration`, реальный Xray): после `kill` процесс снова запущен за 1,03 с, inbound слушает через 1,14 с, API готов через 1,14 с; горячее добавление/удаление пользователя не меняет PID. Xray предупреждает, что цели Reality `www.microsoft.com` и `www.apple.com` повышают риск блокировки — учесть в списке SNI на этапе 4. |
+| 2026-11-09 | 3 | Временный конфиг называется `config.next.json`: Xray определяет формат по расширению. Относительные пути к сертификатам Xray разрешает от каталога ассетов, поэтому в продакшене пути всегда абсолютные. |
