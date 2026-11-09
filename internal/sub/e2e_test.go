@@ -225,8 +225,7 @@ func TestTrafficThroughEveryProfile(t *testing.T) {
 		writeJSON(t, path, c)
 		out := start(t, singBox, "run", "-c", path)
 		if err := fetch(port); err != nil {
-			t.Fatalf("sing-box urltest did not leave the dead profile: %v
-%s", err, out)
+			t.Fatalf("sing-box urltest did not leave the dead profile: %v\n%s", err, out)
 		}
 
 		raw, err = sub.XrayJSON(auto)
@@ -249,8 +248,7 @@ func TestTrafficThroughEveryProfile(t *testing.T) {
 		writeJSON(t, path, x)
 		out = start(t, xrayBin, "run", "-c", path)
 		if err := fetch(httpPort); err != nil {
-			t.Fatalf("xray balancer did not leave the dead profile: %v
-%s", err, out)
+			t.Fatalf("xray balancer did not leave the dead profile: %v\n%s", err, out)
 		}
 	})
 
