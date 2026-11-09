@@ -181,6 +181,9 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 			a.bus.Publish("swift_update", map[string]string{"stage": stage, "detail": detail})
 		},
 	}
+	if runtime.GOOS == "linux" && !cfg.Dev {
+		a.swift.Systemd = service.ExecSystemd{}
+	}
 	a.panelPort.Store(int64(panelPort))
 	a.panel = &service.Panel{
 		Store: st, Ports: &service.Ports{Store: st, Checker: service.OSPorts{}}, Pinned: pinned, Event: a.event,

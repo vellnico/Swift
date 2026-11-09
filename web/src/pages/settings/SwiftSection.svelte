@@ -22,6 +22,7 @@
     updating: boolean;
     auto: boolean;
     supported: boolean;
+    skipped?: string;
   }
 
   const stages = ['downloading', 'verifying', 'testing', 'backup', 'xray', 'restarting'];
@@ -139,6 +140,7 @@
         <p class="t-small muted note">{t('settings.swift_dev')}</p>
       {:else}
         <p class="t-small muted">{checked}. {t('settings.swift_next', { time: next })}</p>
+        {#if rel.skipped}<Alert kind="warning">{t('settings.swift_skipped', { version: rel.skipped })}</Alert>{/if}
         {#if error}<Alert>{error}</Alert>{/if}
         {#if stage}
           <p class="progress" role="status"><Spinner /> {t(`settings.swift_stage.${stage}`)}</p>

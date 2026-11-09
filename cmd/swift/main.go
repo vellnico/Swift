@@ -63,6 +63,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return dbCommand(args[1:], stdout)
 	case "ports":
 		return ports(args[1:], stdout)
+	case "update-guard":
+		return updateGuard(args[1:], stdout)
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 		cfgPath := fs.String("config", config.DefaultPath, "config file")
@@ -127,6 +129,7 @@ func serve(cfgPath string, stdout io.Writer) error {
 	a.startStats(ctx)
 	a.startGeoUpdates(ctx)
 	a.swift.Restart = stop // systemd (Restart=always) starts the new binary
+	a.swift.ConfigPath = cfgPath
 	a.swift.ReportStartup(ctx)
 	go a.swift.RunChecks(ctx)
 	go a.health.Run(ctx)
@@ -173,6 +176,8 @@ func serve(cfgPath string, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "Swift panel: %s://%s/%s/\n", service.Scheme(cfg.InsecureHTTP), net.JoinHostPort(host, strconv.Itoa(port)), path)
 	fmt.Fprintf(stdout, "Subscriptions: port %d\n", subPort)
+	// a new version confirms itself to the rollback guard after a minute without trouble
+	go a.swift.ConfirmUpdate(ctx, a.healthy, time.Minute)
 	if cfg.InsecureHTTP {
 		log.Warn("serving without TLS (insecure_http); use only for local development")
 	}

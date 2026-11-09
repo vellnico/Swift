@@ -93,6 +93,34 @@ ct sh -c 'ls /var/lib/swift/backup-*.db' >/dev/null || fail "--update made no ba
 ct systemctl is-active --quiet swift || fail "swift.service is not active after --update"
 wait_panel
 
+echo "== a broken update rolls back by itself"
+# what the panel leaves behind right before restarting into a new version
+ct swift db backup /var/lib/swift/pre-update.db -config /etc/swift/swift.toml >/dev/null
+ct cp /usr/local/bin/swift /usr/local/bin/swift.bak
+ct sh -c 'printf "#!/bin/sh\nexit 1\n" > /usr/local/bin/swift && chmod 755 /usr/local/bin/swift'
+ct sqlite3 /var/lib/swift/swift.db "INSERT OR REPLACE INTO settings(key, value) VALUES ('swift_update_pending', '{\"from\":\"0.0.1\",\"to\":\"9.9.9\",\"backup\":\"/var/lib/swift/pre-update.db\"}')"
+ct systemd-run --unit swift-update-guard-test --collect /usr/local/bin/swift.bak update-guard -config /etc/swift/swift.toml
+ct systemctl restart swift || true
+rolled=0
+for _ in $(seq 90); do
+	if ct test -f /usr/local/bin/swift.failed && ct /usr/local/bin/swift version >/dev/null 2>&1; then
+		rolled=1
+		break
+	fi
+	sleep 1
+done
+if [ "$rolled" != 1 ]; then
+	ct journalctl -u swift-update-guard-test --no-pager -n 30 >&2 || true
+	fail "the broken update was not rolled back"
+fi
+for _ in $(seq 30); do
+	if ct systemctl is-active --quiet swift; then break; fi
+	sleep 1
+done
+ct systemctl is-active --quiet swift || fail "swift.service is not active after the rollback"
+wait_panel
+[ "$(ct sqlite3 /var/lib/swift/swift.db "SELECT value FROM settings WHERE key = 'swift_skip_version'")" = "9.9.9" ] || fail "the rolled back version is not skipped"
+
 echo "== uninstall"
 run_installer --uninstall || fail "--uninstall failed"
 ct test ! -e /usr/local/bin/swift || fail "binary left after --uninstall"

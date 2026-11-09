@@ -10,6 +10,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -105,12 +107,79 @@ func TestSwiftUpdateSwapsBinaryAndRestarts(t *testing.T) {
 		t.Fatal("a second update must wait for the restart")
 	}
 
-	// the new process reports the update once
+	// the new process confirms itself to the guard once it is healthy
+	var p PendingUpdate
+	if !readJSONSetting(ctx, u.Store, swiftPendingKey, &p) || p.From != "0.3.0" || p.To != "0.4.0" {
+		t.Fatalf("pending update %+v", p)
+	}
 	next := &SwiftUpdater{Store: u.Store, Version: "v0.4.0", GOOS: "linux", Event: u.Event}
 	next.ReportStartup(ctx)
-	next.ReportStartup(ctx)
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	next.ConfirmUpdate(cctx, func() bool { return true }, 0)
+	if c, _ := u.Store.Setting(ctx, swiftConfirmedKey); c != "0.4.0" {
+		t.Fatalf("not confirmed: %q", c)
+	}
 	if len(*events) != 1 || (*events)[0] != "swift.updated" {
 		t.Fatalf("events %v", *events)
+	}
+}
+
+type fakeSystemd struct {
+	mu       sync.Mutex
+	restarts int
+	grow     bool // every NRestarts call sees one more restart
+	calls    []string
+	fail     error
+}
+
+func (f *fakeSystemd) NRestarts(context.Context, string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.grow {
+		f.restarts++
+	}
+	return f.restarts, nil
+}
+
+func (f *fakeSystemd) record(s string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, s)
+	return f.fail
+}
+
+func (f *fakeSystemd) Stop(_ context.Context, unit string) error { return f.record("stop " + unit) }
+func (f *fakeSystemd) Start(_ context.Context, unit string) error { return f.record("start " + unit) }
+func (f *fakeSystemd) RunTransient(_ context.Context, unit string, argv ...string) error {
+	return f.record("run " + strings.Join(argv, " "))
+}
+
+func TestSwiftUpdateStartsTheGuardOrUndoes(t *testing.T) {
+	ctx := context.Background()
+	u, _, _, _ := swiftEnv(t)
+	sd := &fakeSystemd{}
+	u.Systemd, u.ConfigPath = sd, "/etc/swift/swift.toml"
+	if err := u.Update(ctx, "0.4.0"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "run " + u.Binary + ".bak update-guard -config /etc/swift/swift.toml"; len(sd.calls) != 1 || sd.calls[0] != want {
+		t.Fatalf("guard: %v, want %q", sd.calls, want)
+	}
+
+	// the guard cannot start: the update is undone before the restart
+	u2, _, restarts2, _ := swiftEnv(t)
+	u2.Systemd = &fakeSystemd{fail: errors.New("no systemd-run")}
+	var ue *UpdateError
+	if err := u2.Update(ctx, "0.4.0"); !errors.As(err, &ue) || ue.Code != "guard" {
+		t.Fatalf("want guard error, got %v", err)
+	}
+	if b, _ := os.ReadFile(u2.Binary); string(b) != "old" {
+		t.Fatalf("binary %q after a failed guard", b)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	if restarts2.Load() != 0 {
+		t.Fatal("restarted without a guard")
 	}
 }
 

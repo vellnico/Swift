@@ -40,9 +40,15 @@ type SwiftUpdater struct {
 	Restart  func()
 	Event    EventFunc
 	Progress func(stage, detail string)
+	// Systemd starts the rollback guard; nil updates without one (tests, no systemd).
+	Systemd    Systemd
+	ConfigPath string // passed to `swift update-guard`
 
 	running sync.Mutex
 }
+
+// GuardUnit is the transient systemd unit of the rollback guard.
+const GuardUnit = "swift-update-guard"
 
 type SwiftRelease struct {
 	Current   string    `json:"current"`
@@ -55,6 +61,8 @@ type SwiftRelease struct {
 
 	// Supported is false for development builds: they are updated from source.
 	Supported bool `json:"supported"`
+	// Skipped is a release that was rolled back; auto-update leaves it alone.
+	Skipped string `json:"skipped,omitempty"`
 }
 
 const (
@@ -96,6 +104,7 @@ func (u *SwiftUpdater) Info(ctx context.Context) SwiftRelease {
 	r.NextCheck = NextNight(time.Now(), swiftCheckOffset)
 	r.Available = r.Supported && r.Latest != "" && xray.CompareVersions(r.Latest, r.Current) > 0
 	r.Auto, _ = u.autoEnabled(ctx)
+	r.Skipped, _ = u.Store.Setting(ctx, swiftSkipKey)
 	if u.running.TryLock() {
 		u.running.Unlock()
 	} else {
@@ -155,13 +164,19 @@ func (u *SwiftUpdater) nightly(ctx context.Context, night bool) {
 	if after.Latest != before {
 		u.event("info", "swift.update_available", map[string]any{"version": after.Latest})
 	}
-	if night && after.Auto {
+	if night && after.Auto && after.Latest != after.Skipped {
 		_ = u.Update(ctx, after.Latest)
 	}
 }
 
-// ReportStartup journals a finished update once the new version runs.
+// ReportStartup journals what happened before this start: an automatic
+// rollback, or an update made by a version without the rollback guard.
 func (u *SwiftUpdater) ReportStartup(ctx context.Context) {
+	var rb RollbackInfo
+	if readJSONSetting(ctx, u.Store, swiftRolledBackKey, &rb) {
+		_ = u.Store.SetSetting(ctx, swiftRolledBackKey, "")
+		u.event("error", "swift.rolled_back", map[string]any{"from": rb.To, "to": rb.From, "reason": rb.Reason})
+	}
 	from, err := u.Store.Setting(ctx, swiftFromKey)
 	if err != nil || from == "" {
 		return
@@ -169,6 +184,38 @@ func (u *SwiftUpdater) ReportStartup(ctx context.Context) {
 	_ = u.Store.SetSetting(ctx, swiftFromKey, "")
 	if from != u.current() {
 		u.event("info", "swift.updated", map[string]any{"from": from, "to": u.current()})
+	}
+}
+
+// ConfirmUpdate tells the rollback guard that this version works: healthy()
+// must hold for stable without a break. Without a pending update it does nothing.
+func (u *SwiftUpdater) ConfirmUpdate(ctx context.Context, healthy func() bool, stable time.Duration) {
+	var p PendingUpdate
+	if !readJSONSetting(ctx, u.Store, swiftPendingKey, &p) || p.To != u.current() {
+		return
+	}
+	var since time.Time
+	t := time.NewTicker(time.Second)
+	defer t.Stop()
+	for {
+		switch {
+		case !healthy():
+			since = time.Time{}
+		case since.IsZero():
+			since = time.Now()
+		case time.Since(since) >= stable:
+			_ = u.Store.SetSetting(ctx, swiftConfirmedKey, p.To)
+			if skip, _ := u.Store.Setting(ctx, swiftSkipKey); skip == p.To {
+				_ = u.Store.SetSetting(ctx, swiftSkipKey, "")
+			}
+			u.event("info", "swift.updated", map[string]any{"from": p.From, "to": p.To})
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
 	}
 }
 
@@ -246,12 +293,14 @@ func (u *SwiftUpdater) Update(ctx context.Context, version string) (err error) {
 	}
 
 	// a version the administrator installed on purpose stays
+	xrayChanged := false
 	if u.Xray != nil && xray.ValidVersion(newXray) {
 		if cur := u.Xray.Current(ctx); cur == xray.Version && cur != newXray {
 			u.progress("xray", newXray)
 			if err := u.Xray.Update(ctx, newXray); err != nil {
 				return &UpdateError{Code: "xray", Detail: err.Error()}
 			}
+			xrayChanged = true
 		}
 	}
 
@@ -264,8 +313,27 @@ func (u *SwiftUpdater) Update(ctx context.Context, version string) (err error) {
 		_ = os.Rename(old, u.Binary)
 		return fmt.Errorf("install new swift: %w", err)
 	}
-	if err := u.Store.SetSetting(ctx, swiftFromKey, from); err != nil {
+
+	// the previous binary watches the new one and undoes the update if it fails
+	pending := PendingUpdate{From: from, To: version, Backup: backup, XrayChanged: xrayChanged, At: u.Store.Now()}
+	if err := writeJSONSetting(ctx, u.Store, swiftPendingKey, pending); err != nil {
 		return err
+	}
+	_ = u.Store.SetSetting(ctx, swiftConfirmedKey, "")
+	if u.Systemd != nil {
+		unit := fmt.Sprintf("%s-%d", GuardUnit, u.Store.Now().Unix())
+		if err := u.Systemd.RunTransient(ctx, unit, old, "update-guard", "-config", u.ConfigPath); err != nil {
+			// without a guard the update is not safe: put everything back
+			_ = swapBack(u.Binary)
+			if xrayChanged {
+				if swapBack(u.Xray.Xray.Bin) == nil {
+					u.Xray.setCurrent(xray.Version)
+					_ = u.Xray.Xray.Reload(ctx)
+				}
+			}
+			_ = u.Store.SetSetting(ctx, swiftPendingKey, "")
+			return &UpdateError{Code: "guard", Detail: err.Error()}
+		}
 	}
 	u.progress("restarting", version)
 	restarting = true
