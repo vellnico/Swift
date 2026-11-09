@@ -16,6 +16,8 @@
   import Login from './pages/Login.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import More from './pages/More.svelte';
+  import Profiles from './pages/Profiles.svelte';
+  import { onGlobalKey } from './lib/hotkeys';
   import NotFound from './pages/NotFound.svelte';
 
   const desktop = new MediaQuery('(min-width: 960px)');
@@ -51,6 +53,8 @@
   };
 </script>
 
+<svelte:window onkeydown={(e) => session.status === 'authed' && onGlobalKey(e)} />
+
 {#if session.status === 'anon'}
   <Login onsuccess={signedIn} />
 {:else if session.status === 'authed'}
@@ -63,6 +67,8 @@
             {#await import('./pages/Kit.svelte') then Kit}<Kit.default />{/await}
           {:else if route.name === 'more'}
             <More />
+          {:else if route.name === 'profiles'}
+            <Profiles />
           {:else if route.name === 'notfound'}
             <NotFound />
           {:else}

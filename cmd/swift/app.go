@@ -20,13 +20,15 @@ import (
 
 // app wires the long-lived parts of `swift serve` together.
 type app struct {
-	cfg  config.Config
-	st   *store.Store
-	log  *slog.Logger
-	bus  *bus.Bus
-	srv  *web.Server
-	sup  *xray.Supervisor
-	xray *service.Xray
+	cfg      config.Config
+	st       *store.Store
+	log      *slog.Logger
+	bus      *bus.Bus
+	srv      *web.Server
+	sup      *xray.Supervisor
+	xray     *service.Xray
+	certs    *service.Certs
+	profiles *service.Profiles
 }
 
 type xrayStatus struct {
@@ -69,6 +71,17 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		},
 	}
 
+	certs := &service.Certs{Store: st, Dir: filepath.Join(cfg.DataDir, "certs")}
+	a.xray.Certs = certs.Files
+	a.certs = certs
+	a.profiles = &service.Profiles{
+		Store:  st,
+		Xray:   a.xray,
+		Ports:  &service.Ports{Store: st, Checker: service.OSPorts{}},
+		Prober: xray.TLSProber{},
+		Certs:  certs,
+	}
+
 	a.srv = web.New(web.Deps{
 		PanelPath: panelPath,
 		Assets:    webassets.Panel(),
@@ -76,6 +89,7 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		Store:     st,
 		Auth:      auth.NewManager(st),
 		Bus:       a.bus,
+		Profiles:  a.profiles,
 		OnEvent:   func(ev store.Event) { a.bus.Publish("event", ev) },
 	})
 	a.srv.Handle("GET /api/xray/status", func(w http.ResponseWriter, _ *http.Request) {

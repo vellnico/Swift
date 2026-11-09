@@ -219,6 +219,21 @@ func TestProtectedRoutesNeedSession(t *testing.T) {
 	}
 }
 
+func TestPathValuesReachHandlers(t *testing.T) {
+	e := newEnv(t)
+	got := ""
+	e.srv.Handle("PUT /api/things/{id}", func(w http.ResponseWriter, r *http.Request) {
+		got = r.PathValue("id")
+		writeJSON(w, 200, map[string]string{})
+	})
+	c := newClient(t, e)
+	c.do("GET", "/api/auth/session", "", false)
+	c.do("POST", "/api/auth/login", `{"username":"`+e.user+`","password":"`+e.pass+`"}`, true)
+	if code, _ := c.do("PUT", "/api/things/42", "{}", true); code != 200 || got != "42" {
+		t.Fatalf("path value %q, code %d", got, code)
+	}
+}
+
 func TestExpiredSessionRejected(t *testing.T) {
 	e := newEnv(t)
 	c := newClient(t, e)

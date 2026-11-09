@@ -13,6 +13,7 @@ import (
 
 	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/bus"
+	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
 )
 
@@ -24,6 +25,7 @@ type Deps struct {
 	Auth      *auth.Manager
 	Limiter   *auth.Limiter
 	Bus       *bus.Bus
+	Profiles  *service.Profiles
 	// OnEvent is called after a journal entry is written (used to push it over SSE).
 	OnEvent func(store.Event)
 }
@@ -48,6 +50,7 @@ func New(d Deps) *Server {
 	s.Handle("POST /api/auth/logout", s.logout)
 	s.Handle("POST /api/auth/password", s.changePassword)
 	s.Handle("GET /api/events", s.events)
+	s.registerProfiles()
 	return s
 }
 
@@ -74,8 +77,7 @@ func (s *Server) Handler() http.Handler {
 			r2 := r.Clone(r.Context())
 			r2.URL.Path = "/" + rest
 			r2.URL.RawPath = ""
-			h, pattern := s.api.Handler(r2)
-			if pattern == "" {
+			if _, pattern := s.api.Handler(r2); pattern == "" {
 				writeError(w, http.StatusNotFound, "not_found")
 				return
 			}
@@ -84,7 +86,8 @@ func (s *Server) Handler() http.Handler {
 				return
 			}
 			w.Header().Set("Cache-Control", "no-store")
-			h.ServeHTTP(w, r2)
+			// ServeHTTP (not the handler from Handler) fills r.PathValue
+			s.api.ServeHTTP(w, r2)
 			return
 		}
 		s.serveSPA(w, r, rest)
