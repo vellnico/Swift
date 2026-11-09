@@ -112,6 +112,15 @@ func (s *Profiles) Defaults(ctx context.Context, k xray.Kind) (xray.Params, erro
 
 // Create makes a working profile of kind k with one call (SPEC 6.2).
 func (s *Profiles) Create(ctx context.Context, k xray.Kind) (xray.Profile, error) {
+	return s.create(ctx, k, true)
+}
+
+// CreateOffline stores a profile without touching a running xray (used by `swift setup`).
+func (s *Profiles) CreateOffline(ctx context.Context, k xray.Kind) (xray.Profile, error) {
+	return s.create(ctx, k, false)
+}
+
+func (s *Profiles) create(ctx context.Context, k xray.Kind, apply bool) (xray.Profile, error) {
 	if !k.Valid() {
 		return xray.Profile{}, &ValidationError{Fields: map[string]string{"kind": "invalid"}}
 	}
@@ -128,7 +137,7 @@ func (s *Profiles) Create(ctx context.Context, k xray.Kind) (xray.Profile, error
 		return xray.Profile{}, err
 	}
 	p, err := s.Store.CreateProfile(ctx, xray.Profile{Name: name, Kind: k, Port: port, Enabled: true, Params: params})
-	if err != nil {
+	if err != nil || !apply {
 		return p, err
 	}
 	if err := s.Xray.Apply(ctx); err != nil {

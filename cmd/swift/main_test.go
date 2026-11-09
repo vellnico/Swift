@@ -5,10 +5,12 @@ import (
 	"context"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/store"
+	"github.com/vellnico/swift/internal/xray"
 )
 
 func TestVersion(t *testing.T) {
@@ -16,8 +18,47 @@ func TestVersion(t *testing.T) {
 	if err := run([]string{"version"}, &out, &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.String() != "swift dev\n" {
+	if !strings.HasPrefix(out.String(), "swift dev xray ") {
 		t.Fatalf("got %q", out.String())
+	}
+	out.Reset()
+	_ = run([]string{"version", "--xray"}, &out, &out)
+	if strings.TrimSpace(out.String()) != xray.Version {
+		t.Fatalf("--xray: %q", out.String())
+	}
+}
+
+func TestSetupIsIdempotentAndBackupWorks(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SWIFT_DATA_DIR", dir)
+	bin := xray.TestBinary()
+	if bin == "" {
+		t.Fatal("xray binary not found: run `make xray`")
+	}
+	t.Setenv("SWIFT_XRAY_BIN", bin)
+	var out bytes.Buffer
+	// no default profiles: they probe Reality targets over the network
+	if err := run([]string{"setup", "-config", "", "-address", "203.0.113.7", "-no-profiles"}, &out, &out); err != nil {
+		t.Fatalf("setup: %v\n%s", err, out.String())
+	}
+	out.Reset()
+	if err := run([]string{"setup", "-config", ""}, &out, &out); err != nil || !strings.Contains(out.String(), "already set up") {
+		t.Fatalf("second setup: %v %q", err, out.String())
+	}
+	backup := filepath.Join(dir, "backup.db")
+	if err := run([]string{"db", "backup", backup, "-config", ""}, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(context.Background(), backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if v, _ := st.Setting(context.Background(), "server_address"); v != "203.0.113.7" {
+		t.Fatalf("backup content: %q", v)
+	}
+	if err := run([]string{"db", "backup", backup, "-config", ""}, &out, &out); err == nil {
+		t.Fatal("backup must not overwrite an existing file")
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
 	"github.com/vellnico/swift/internal/web"
+	"github.com/vellnico/swift/internal/xray"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -37,7 +38,10 @@ func main() {
 const usage = `Usage:
   swift serve [-config path]
   swift admin show|reset [-config path]
-  swift version
+  swift setup [-address ip] [-domain name] [-config path]
+  swift db backup <file> [-config path]
+  swift ports [-config path]
+  swift version [--xray]
 `
 
 func run(args []string, stdout, stderr io.Writer) error {
@@ -47,8 +51,18 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	switch args[0] {
 	case "version":
-		fmt.Fprintln(stdout, "swift", version)
+		if len(args) > 1 && args[1] == "--xray" {
+			fmt.Fprintln(stdout, xray.Version)
+			return nil
+		}
+		fmt.Fprintln(stdout, "swift", version, "xray", xray.Version)
 		return nil
+	case "setup":
+		return setup(args[1:], stdout)
+	case "db":
+		return dbCommand(args[1:], stdout)
+	case "ports":
+		return ports(args[1:], stdout)
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 		cfgPath := fs.String("config", config.DefaultPath, "config file")

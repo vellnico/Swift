@@ -85,6 +85,17 @@ func (s *Store) migrate(ctx context.Context) error {
 	return nil
 }
 
+// Backup writes a consistent copy of the database to path (VACUUM INTO).
+func (s *Store) Backup(ctx context.Context, path string) error {
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("backup %s: file exists", path)
+	}
+	if _, err := s.DB.ExecContext(ctx, `VACUUM INTO ?`, path); err != nil {
+		return fmt.Errorf("backup: %w", err)
+	}
+	return nil
+}
+
 // Tx runs fn in a transaction, committing on success.
 func (s *Store) Tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := s.DB.BeginTx(ctx, nil)

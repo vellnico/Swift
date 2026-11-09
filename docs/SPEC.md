@@ -419,7 +419,10 @@ Swift — стриж, самая быстрая птица, которая по�
 swift serve
 swift admin show          # URL, логин (без пароля)
 swift admin reset         # новый пароль, вывод в терминал
-swift version
+swift version [--xray]    # версия Swift и Xray; --xray — только версия Xray
+swift setup               # подготовка сервера для install.sh (идемпотентно)
+swift ports               # порты для файрвола: «tcp 443», «udp 443»…
+swift db backup <file>    # копия БД через VACUUM INTO
 ```
 
 ### 11.3 `install.sh`
@@ -454,7 +457,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/<owner>/swift/main/scripts/i
 - [x] 6. Дашборд и метрики
 - [x] 7. Сертификаты
 - [x] 8. Раздельное туннелирование
-- [ ] 9. install.sh, systemd, релизы
+- [x] 9. install.sh, systemd, релизы
 - [ ] 10. Обновление Xray, журнал, настройки
 - [ ] 11. Полировка
 
@@ -623,3 +626,6 @@ bash <(curl -fsSL https://raw.githubusercontent.com/<owner>/swift/main/scripts/i
 | 2026-11-09 | 8 | Пресет «Российское напрямую»: `.ru`/`.su`/`.рф`, `category-ru`, `geoip:ru` и приватные сети → direct. В Xray-JSON для v2rayNG нет `ru-available-only-inside`: v2rayNG по умолчанию может использовать geo-файлы Loyalsoldier без этой категории, и тогда конфиг не загрузится. sing-box и Happ скачивают списки runetfreedom (sing-box — через proxy, т. к. GitHub бывает недоступен напрямую). Xray-JSON с пресетом проходит `xray run -test`. Пресет по умолчанию включён. |
 | 2026-11-09 | 8 | **Ожидает ручной проверки.** (1) В Hiddify российский сайт открывается с IP клиента, зарубежный — с IP сервера. (2) Hiddify принимает наш блок `dns` в формате серверов `address` (sing-box ≤ 1.11) и правила `action: sniff`/`hijack-dns` (≥ 1.11). (3) Happ принимает заголовок `routing` в виде base64 JSON-профиля, как в §8 (возможно, нужен формат `happ://routing/add/<base64>`). |
 | 2026-11-09 | 8 | Geo-файлы сервера обновляются раз в 24 ч (кроме dev) рядом с бинарником Xray с проверкой SHA-256 и атомарной заменой. Xray не перезапускается: серверный конфиг использует только `geoip:private`, новые файлы подхватятся при следующем старте. |
+| 2026-11-09 | 9 | `install.sh` вызывает `swift setup`: адрес, порты панели и подписок, сертификат (ACME при `--domain`, при неудаче — self-signed с подсказкой), профили VLESS Reality Vision 443/tcp и Hysteria2 443/udp и проверенный `xray run -test` конфиг. Признак `settings.setup_done` делает повторный запуск пустым; пароль выдаётся только при первой установке (`swift admin reset`), повторный запуск показывает URL и логин. |
+| 2026-11-09 | 9 | Флаги сверх §11.3: `--address <ip>` (если IP не определился), `--uninstall --purge` (без него БД и `/etc/swift` сохраняются), `--no-bbr`, `--from-dir <dir>` (локальные `swift` и `xray/` для теста установки). `--update` делает бэкап `/var/lib/swift/backup-<дата>.db` через `swift db backup` и меняет бинарники Swift и Xray. Архивы релиза — `swift_<версия>_linux_<arch>.tar.gz` + `checksums.txt` (GoReleaser, тег `v*`); Xray скачивается с GitHub XTLS и сверяется с `.dgst`. |
+| 2026-11-09 | 9 | **Ожидает проверки в CI.** Тест установки `scripts/test-install.sh` в systemd-контейнерах Debian 12 и Ubuntu 24.04 (чистая установка, повторная, `--update`, `--uninstall`, `--purge`) добавлен в CI-матрицу, но локально не запускался: на машине разработки нет Docker и WSL. Конфиг GoReleaser проверится первым тегом. Локально проверено: `shellcheck` чист, сборка `linux/amd64` и `linux/arm64`, тест идемпотентности `swift setup` и бэкапа. |

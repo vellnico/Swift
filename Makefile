@@ -11,7 +11,7 @@ STATICCHECK_VERSION := 2026.2.2
 
 export CGO_ENABLED := 0
 
-.PHONY: dev build web-deps web go-build test integration lint xray golden clean
+.PHONY: dev build web-deps web go-build test integration install-test lint xray golden clean
 
 web/node_modules/.package-lock.json: web/package.json web/package-lock.json
 	cd web && $(NPM) ci --no-fund --no-audit
@@ -35,6 +35,11 @@ test: web-deps
 integration:
 	$(GO) test -count=1 -tags integration $(GO_PKGS)
 
+# Installer test in systemd containers (needs docker and a linux bin/swift).
+install-test:
+	scripts/test-install.sh debian:12
+	scripts/test-install.sh ubuntu:24.04
+
 lint: web-deps
 	$(GO) vet $(GO_PKGS)
 	$(GO) run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) $(GO_PKGS)
@@ -42,6 +47,7 @@ lint: web-deps
 		if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	cd web && $(NPM) run check
 	cd web && $(NPM) run lint
+	shellcheck scripts/*.sh
 
 xray:
 	$(GO) run ./tools/fetchxray -dir .cache/xray

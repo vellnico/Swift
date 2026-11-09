@@ -1,0 +1,36 @@
+version: 2
+project_name: swift
+
+before:
+  hooks:
+    - make web
+
+builds:
+  - id: swift
+    main: ./cmd/swift
+    binary: swift
+    env:
+      - CGO_ENABLED=0
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: git
+  sort: asc
+
+release:
+  draft: false
+  prerelease: auto
