@@ -12,6 +12,7 @@
   import PanelSection from './settings/PanelSection.svelte';
   import PasswordSection from './settings/PasswordSection.svelte';
   import ServerSection from './settings/ServerSection.svelte';
+  import SwiftSection from './settings/SwiftSection.svelte';
   import XraySection from './settings/XraySection.svelte';
   import type { PanelInfo } from './settings/panel';
 
@@ -36,7 +37,8 @@
       </Card>
     </div>
     <div in:fadeShift={{ delay: stagger(4) }}><PasswordSection /></div>
-    <div id="xray" in:fadeShift={{ delay: stagger(5) }}><XraySection /></div>
+    <div id="swift" in:fadeShift={{ delay: stagger(5) }}><SwiftSection /></div>
+    <div id="xray" in:fadeShift={{ delay: stagger(6) }}><XraySection /></div>
   </div>
 </Page>
 

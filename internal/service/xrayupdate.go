@@ -137,24 +137,15 @@ func (u *XrayUpdater) Check(ctx context.Context) (XrayRelease, error) {
 	return u.Info(ctx), nil
 }
 
-// RunChecks checks for a new release once a day until ctx ends.
-func (u *XrayUpdater) RunChecks(ctx context.Context, every time.Duration) {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for {
-		info := u.Info(ctx)
-		if u.Store.Now().Sub(info.CheckedAt) >= every {
-			before := info.Latest
-			if after, err := u.Check(ctx); err == nil && after.Available && after.Latest != before {
-				u.event("info", "xray.update_available", map[string]any{"version": after.Latest})
-			}
+// RunChecks checks for a new release every night until ctx ends. Xray is never
+// updated by itself: newer releases may break clients (see BreaksHiddify).
+func (u *XrayUpdater) RunChecks(ctx context.Context) {
+	runNightly(ctx, 0, func() time.Time { return u.Info(ctx).CheckedAt }, func(bool) {
+		before := u.Info(ctx).Latest
+		if after, err := u.Check(ctx); err == nil && after.Available && after.Latest != before {
+			u.event("info", "xray.update_available", map[string]any{"version": after.Latest})
 		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
+	})
 }
 
 // Update installs version: download, verify SHA256, `xray run -test` with the

@@ -126,6 +126,9 @@ func serve(cfgPath string, stdout io.Writer) error {
 	a.startXray(ctx)
 	a.startStats(ctx)
 	a.startGeoUpdates(ctx)
+	a.swift.Restart = stop // systemd (Restart=always) starts the new binary
+	a.swift.ReportStartup(ctx)
+	go a.swift.RunChecks(ctx)
 
 	panelH, subH := a.handlers(port, subPort)
 	errc := make(chan error, 4)

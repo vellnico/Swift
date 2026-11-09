@@ -23,6 +23,7 @@
     usersEnabled: number;
     cert?: { kind: string; lastError: string };
     xrayUpdate?: string;
+    swiftUpdate?: string;
   }
 
   let overview = $state<Overview | null>(null);
@@ -50,6 +51,11 @@
 <Page title={t('nav.dashboard')}>
   {#if overview?.cert?.lastError}
     <div in:fadeShift><Alert kind="warning">{t('dash.cert_error', { error: overview.cert.lastError })}</Alert></div>
+  {/if}
+  {#if overview?.swiftUpdate}
+    <div in:fadeShift>
+      <Alert kind="warning">{t('dash.swift_update', { version: overview.swiftUpdate })} <a href={href('/settings')}>{t('dash.xray_update_action')}</a></Alert>
+    </div>
   {/if}
   {#if overview?.xrayUpdate}
     <div in:fadeShift>

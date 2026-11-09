@@ -18,6 +18,7 @@ import (
 	certsPkg "github.com/vellnico/swift/internal/certs"
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/routing"
+	"github.com/vellnico/swift/internal/selfupdate"
 	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
 	"github.com/vellnico/swift/internal/sysstat"
@@ -43,6 +44,7 @@ type app struct {
 	stats    *sysstat.Collector
 	holder   *certsPkg.Holder
 	updater  *service.XrayUpdater
+	swift    *service.SwiftUpdater
 	panel    *service.Panel
 
 	xrayVersion atomic.Pointer[string]
@@ -167,6 +169,17 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 			a.bus.Publish("xray_update", map[string]string{"stage": stage, "detail": detail})
 		},
 	}
+	bin, _ := os.Executable()
+	if p, err := filepath.EvalSymlinks(bin); err == nil {
+		bin = p
+	}
+	a.swift = &service.SwiftUpdater{
+		Store: st, Source: selfupdate.GitHub{}, Version: version, Binary: bin, DataDir: cfg.DataDir,
+		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH, Xray: a.updater, Event: a.event,
+		Progress: func(stage, detail string) {
+			a.bus.Publish("swift_update", map[string]string{"stage": stage, "detail": detail})
+		},
+	}
 	a.panelPort.Store(int64(panelPort))
 	a.panel = &service.Panel{
 		Store: st, Ports: &service.Ports{Store: st, Checker: service.OSPorts{}}, Pinned: pinned, Event: a.event,
@@ -184,6 +197,7 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 	a.srv = web.New(web.Deps{
 		Panel:     a.panel,
 		Updater:   a.updater,
+		Swift:     a.swift,
 		PanelPort: func() int { return int(a.panelPort.Load()) },
 		PanelPath: panelPath,
 		Assets:    webassets.Panel(),
@@ -272,6 +286,9 @@ func (a *app) overview(w http.ResponseWriter, r *http.Request) {
 	if info := a.updater.Info(ctx); info.Available && !info.BreaksHiddify {
 		out["xrayUpdate"] = info.Latest
 	}
+	if info := a.swift.Info(ctx); info.Available && !info.Auto {
+		out["swiftUpdate"] = info.Latest
+	}
 	web.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -300,5 +317,5 @@ func (a *app) startXray(ctx context.Context) {
 	}
 	a.setVersion(a.updater.Current(ctx))
 	go a.sup.Run(ctx)
-	go a.updater.RunChecks(ctx, 24*time.Hour)
+	go a.updater.RunChecks(ctx)
 }

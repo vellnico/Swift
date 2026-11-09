@@ -20,6 +20,12 @@ func (s *Server) registerSettings() {
 		s.Handle("POST /api/xray/check", s.xrayCheck)
 		s.Handle("POST /api/xray/update", s.xrayUpdate)
 	}
+	if s.Swift != nil {
+		s.Handle("GET /api/swift/release", s.swiftRelease)
+		s.Handle("POST /api/swift/check", s.swiftCheck)
+		s.Handle("POST /api/swift/update", s.swiftUpdate)
+		s.Handle("PUT /api/swift/auto", s.swiftAuto)
+	}
 }
 
 func (s *Server) currentPort() int {
@@ -119,4 +125,57 @@ func (s *Server) xrayUpdate(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.serviceError(w, err)
 	}
+}
+
+func (s *Server) swiftRelease(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Swift.Info(r.Context()))
+}
+
+func (s *Server) swiftCheck(w http.ResponseWriter, r *http.Request) {
+	info, err := s.Swift.Check(r.Context())
+	if err != nil {
+		s.Log.Warn("swift release check", "err", err)
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "check_failed", "release": info})
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
+func (s *Server) swiftUpdate(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Version string `json:"version"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	// the download outlives a closed browser tab
+	err := s.Swift.Update(context.WithoutCancel(r.Context()), body.Version)
+	var ue *service.UpdateError
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusAccepted, s.Swift.Info(r.Context()))
+	case errors.Is(err, service.ErrUpdateBusy):
+		writeError(w, http.StatusConflict, "update_busy")
+	case errors.As(err, &ue):
+		s.Log.Warn("swift update failed", "code", ue.Code, "detail", ue.Detail)
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "update_" + ue.Code, "detail": ue.Detail})
+	default:
+		s.serviceError(w, err)
+	}
+}
+
+func (s *Server) swiftAuto(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if err := s.Swift.SetAuto(r.Context(), body.Enabled); err != nil {
+		s.serviceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.Swift.Info(r.Context()))
 }
