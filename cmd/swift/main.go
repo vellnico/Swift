@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/vellnico/swift/internal/config"
+	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
 )
 
@@ -97,26 +98,37 @@ func serve(cfgPath string, stdout io.Writer) error {
 	if _, err := st.FirstAdmin(ctx); errors.Is(err, store.ErrNotFound) {
 		fmt.Fprintln(stdout, "No administrator yet: run `swift admin reset` to create one.")
 	}
+	subPort, err := service.EnsureSubPort(ctx, st, cfg.SubPort, port, func() int { return 20000 + randInt(40001) })
+	if err != nil {
+		return err
+	}
 	go sessionGC(ctx, st, log)
 	a.startXray(ctx)
-	hs := &http.Server{
-		Addr:              net.JoinHostPort(cfg.Listen, strconv.Itoa(port)),
-		Handler:           a.srv.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
+
+	panelH, subH := a.handlers(port, subPort)
+	servers := []*http.Server{newHTTPServer(cfg.Listen, port, panelH)}
+	if subH != nil {
+		servers = append(servers, newHTTPServer(cfg.Listen, subPort, subH))
 	}
-	ln, err := net.Listen("tcp", hs.Addr)
-	if err != nil {
-		return fmt.Errorf("listen %s: %w", hs.Addr, err)
+	listeners := make([]net.Listener, 0, len(servers))
+	for _, hs := range servers {
+		ln, err := net.Listen("tcp", hs.Addr)
+		if err != nil {
+			return fmt.Errorf("listen %s: %w", hs.Addr, err)
+		}
+		listeners = append(listeners, ln)
 	}
 	host := cfg.Listen
 	if host == "" {
 		host = "localhost"
 	}
 	fmt.Fprintf(stdout, "Swift panel: http://%s/%s/\n", net.JoinHostPort(host, strconv.Itoa(port)), path)
+	fmt.Fprintf(stdout, "Subscriptions: port %d\n", subPort)
 
-	errc := make(chan error, 1)
-	go func() { errc <- hs.Serve(ln) }()
+	errc := make(chan error, len(servers))
+	for i, hs := range servers {
+		go func() { errc <- hs.Serve(listeners[i]) }()
+	}
 	select {
 	case err := <-errc:
 		return fmt.Errorf("http server: %w", err)
@@ -124,7 +136,19 @@ func serve(cfgPath string, stdout io.Writer) error {
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return hs.Shutdown(shutdownCtx)
+	for _, hs := range servers {
+		_ = hs.Shutdown(shutdownCtx)
+	}
+	return nil
+}
+
+func newHTTPServer(host string, port int, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              net.JoinHostPort(host, strconv.Itoa(port)),
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 }
 
 // panelAddress resolves the panel port and path: config/env first, then the

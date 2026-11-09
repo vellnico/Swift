@@ -20,7 +20,7 @@ web-deps: web/node_modules/.package-lock.json
 
 web: web-deps
 	cd web && $(NPM) run build
-	@touch web/dist/.gitkeep
+	@touch web/dist/.gitkeep web/sub/dist/.gitkeep
 
 go-build:
 	$(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/swift$(EXE) ./cmd/swift

@@ -23,7 +23,7 @@ export default defineConfig(({ command }) => ({
     environment: 'jsdom',
     // tokens.test.ts reads stylesheets with ?raw
     css: true,
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'sub/**/*.test.ts'],
   },
   resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
 }));

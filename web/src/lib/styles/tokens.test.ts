@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dur } from '../motion';
 import tokens from './tokens.css?raw';
 
-const sources = import.meta.glob<string>(['/src/**/*.{svelte,ts,css}', '/sub/**/*.{svelte,ts,css}', '!**/*.test.ts', '!**/tokens.css'], {
+const sources = import.meta.glob<string>(['/src/**/*.{svelte,ts,css}', '/sub/**/*.{svelte,ts,css}', '!**/*.test.ts', '!**/tokens.css', '!**/dist/**'], {
   query: '?raw',
   import: 'default',
   eager: true,

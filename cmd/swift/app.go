@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/bus"
@@ -29,6 +30,25 @@ type app struct {
 	xray     *service.Xray
 	certs    *service.Certs
 	profiles *service.Profiles
+	users    *service.Users
+	subs     *service.Subscriptions
+	sub      *web.SubServer
+}
+
+// handlers returns the panel and subscription handlers; with one shared port
+// the subscription server answers /s/ and the panel everything else.
+func (a *app) handlers(panelPort, subPort int) (panel, sub http.Handler) {
+	if panelPort != subPort {
+		return a.srv.Handler(), a.sub.Handler()
+	}
+	ph, sh := a.srv.Handler(), a.sub.Handler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/s/") {
+			sh.ServeHTTP(w, r)
+			return
+		}
+		ph.ServeHTTP(w, r)
+	}), nil
 }
 
 type xrayStatus struct {
@@ -82,6 +102,10 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		Certs:  certs,
 	}
 
+	a.users = &service.Users{Store: st, Xray: a.xray}
+	a.subs = &service.Subscriptions{Store: st, Certs: certs}
+	a.sub = &web.SubServer{Store: st, Subs: a.subs, Assets: webassets.SubPage(), Dict: webassets.Dictionary, Log: log}
+
 	a.srv = web.New(web.Deps{
 		PanelPath: panelPath,
 		Assets:    webassets.Panel(),
@@ -90,6 +114,8 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		Auth:      auth.NewManager(st),
 		Bus:       a.bus,
 		Profiles:  a.profiles,
+		Users:     a.users,
+		Subs:      a.subs,
 		OnEvent:   func(ev store.Event) { a.bus.Publish("event", ev) },
 	})
 	a.srv.Handle("GET /api/xray/status", func(w http.ResponseWriter, _ *http.Request) {

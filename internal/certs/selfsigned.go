@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
@@ -90,15 +89,6 @@ func SelfSigned(cn string, ip net.IP, now time.Time) (Issued, error) {
 func FingerprintHex(der []byte) string {
 	sum := sha256.Sum256(der)
 	return hex.EncodeToString(sum[:])
-}
-
-// HexToBase64 converts a hex fingerprint to the base64 form Xray's pinnedPeerCertSha256 expects.
-func HexToBase64(h string) (string, error) {
-	b, err := hex.DecodeString(h)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(b), nil
 }
 
 // LeafFingerprint reads a PEM file and returns the hex SHA-256 of its first certificate.

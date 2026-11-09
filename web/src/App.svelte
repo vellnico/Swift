@@ -17,6 +17,7 @@
   import Placeholder from './pages/Placeholder.svelte';
   import More from './pages/More.svelte';
   import Profiles from './pages/Profiles.svelte';
+  import Users from './pages/Users.svelte';
   import { onGlobalKey } from './lib/hotkeys';
   import NotFound from './pages/NotFound.svelte';
 
@@ -69,6 +70,8 @@
             <More />
           {:else if route.name === 'profiles'}
             <Profiles />
+          {:else if route.name === 'users'}
+            <Users />
           {:else if route.name === 'notfound'}
             <NotFound />
           {:else}

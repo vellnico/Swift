@@ -1,0 +1,82 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "outbounds": [
+    {
+      "default": "auto",
+      "outbounds": [
+        "auto",
+        "Swift · VLESS Reality",
+        "Swift · Hysteria2"
+      ],
+      "tag": "proxy",
+      "type": "selector"
+    },
+    {
+      "interval": "3m",
+      "outbounds": [
+        "Swift · VLESS Reality",
+        "Swift · Hysteria2"
+      ],
+      "tag": "auto",
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "server": "203.0.113.7",
+      "server_port": 443,
+      "tag": "Swift · VLESS Reality",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "Zk3iT0P0bRx6Qv2nC8yL1uWm4sJ7hAeD9fGqXo5tNcI",
+          "short_id": "a1b2c3d4e5f60718"
+        },
+        "server_name": "www.samsung.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "6f1b0b8e-6d1f-4a7e-9a52-1b2f3c4d5e6f"
+    },
+    {
+      "obfs": {
+        "password": "Zt7Qw2Lp9Xk4Vn6Rb8Mc",
+        "type": "salamander"
+      },
+      "password": "R7mKp2VnX9qT4wZs8LcY1bFd",
+      "server": "203.0.113.7",
+      "server_port": 443,
+      "tag": "Swift · Hysteria2",
+      "tls": {
+        "alpn": [
+          "h3"
+        ],
+        "certificate": [
+          "-----BEGIN CERTIFICATE-----",
+          "MIIBszCCAVmgAwIBAgIQTEST",
+          "-----END CERTIFICATE-----"
+        ],
+        "enabled": true,
+        "insecure": false,
+        "server_name": "media-3.fastedge.io"
+      },
+      "type": "hysteria2"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "final": "proxy",
+    "rules": []
+  }
+}

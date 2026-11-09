@@ -26,6 +26,8 @@ type Deps struct {
 	Limiter   *auth.Limiter
 	Bus       *bus.Bus
 	Profiles  *service.Profiles
+	Users     *service.Users
+	Subs      *service.Subscriptions
 	// OnEvent is called after a journal entry is written (used to push it over SSE).
 	OnEvent func(store.Event)
 }
@@ -51,6 +53,7 @@ func New(d Deps) *Server {
 	s.Handle("POST /api/auth/password", s.changePassword)
 	s.Handle("GET /api/events", s.events)
 	s.registerProfiles()
+	s.registerUsers()
 	return s
 }
 

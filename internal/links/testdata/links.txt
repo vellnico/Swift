@@ -1,0 +1,5 @@
+vless://6f1b0b8e-6d1f-4a7e-9a52-1b2f3c4d5e6f@203.0.113.7:443?type=tcp&security=reality&pbk=Zk3iT0P0bRx6Qv2nC8yL1uWm4sJ7hAeD9fGqXo5tNcI&fp=chrome&sni=www.samsung.com&sid=a1b2c3d4e5f60718&flow=xtls-rprx-vision#Swift%20%C2%B7%20VLESS%20Reality
+vless://6f1b0b8e-6d1f-4a7e-9a52-1b2f3c4d5e6f@203.0.113.7:8443?type=xhttp&security=reality&pbk=Zk3iT0P0bRx6Qv2nC8yL1uWm4sJ7hAeD9fGqXo5tNcI&fp=firefox&sni=www.samsung.com&sid=9988776655443322&path=%2Fk3j9x2m4&mode=auto#Swift%20%C2%B7%20VLESS%20XHTTP
+hysteria2://R7mKp2VnX9qT4wZs8LcY1bFd@203.0.113.7:443/?sni=media-3.fastedge.io&obfs=salamander&obfs-password=Zt7Qw2Lp9Xk4Vn6Rb8Mc&insecure=0&pinSHA256=3f2a9c1e7b5d4f8a0c6e2b9d1f7a3c5e8b0d2f4a6c9e1b3d5f7a9c0e2b4d6f8a#Swift%20%C2%B7%20Hysteria2
+hysteria2://R7mKp2VnX9qT4wZs8LcY1bFd@vpn.example.com:443/?sni=vpn.example.com&obfs=salamander&obfs-password=Zt7Qw2Lp9Xk4Vn6Rb8Mc&insecure=0#Swift%20%C2%B7%20Hysteria2
+vless://6f1b0b8e-6d1f-4a7e-9a52-1b2f3c4d5e6f@[2001:db8::1]:443?type=tcp&security=reality&pbk=Zk3iT0P0bRx6Qv2nC8yL1uWm4sJ7hAeD9fGqXo5tNcI&fp=chrome&sni=www.samsung.com&sid=a1b2c3d4e5f60718&flow=xtls-rprx-vision#Swift%20%C2%B7%20VLESS%20Reality

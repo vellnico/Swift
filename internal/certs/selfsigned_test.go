@@ -32,10 +32,6 @@ func TestSelfSigned(t *testing.T) {
 	if err != nil || fp != is.SHA256Hex || !na.Equal(is.NotAfter) {
 		t.Fatalf("leaf %q %v %v", fp, na, err)
 	}
-	b64, err := HexToBase64(is.SHA256Hex)
-	if err != nil || len(b64) != 44 {
-		t.Fatalf("base64 %q %v", b64, err)
-	}
 	dir := t.TempDir()
 	cp, kp, err := WriteFiles(dir, "hy2", is)
 	if err != nil {
