@@ -25,6 +25,8 @@ PURGE=0
 FROM_DIR=""
 TMP=""
 TAG=""
+XRAY_VER=""
+XRAY_PINNED=""
 
 # Character counts below must be in characters, not bytes.
 if locale -a 2>/dev/null | grep -qiE '^c\.utf-?8$'; then export LC_ALL=C.UTF-8; fi
@@ -339,24 +341,57 @@ download_swift() {
 	tar -xzf "$TMP/$file" -C "$TMP" swift
 }
 
-# download_xray leaves xray and geo files in $TMP/xray/, pinned to Swift's version.
+# latest_xray prints the newest stable Xray-core version (no "v"), or nothing.
+latest_xray() {
+	local tag
+	tag="$(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/XTLS/Xray-core/releases/latest || true)"
+	tag="${tag##*/v}"
+	case "$tag" in [0-9]*.[0-9]*) printf '%s' "$tag" ;; esac
+}
+
+# xray_zip downloads and verifies Xray $1 into $TMP/xray/; it returns 1 instead of dying.
+xray_zip() {
+	local ver=$1 zip="Xray-linux-${XRAY_ARCH}.zip" want got
+	local base="https://github.com/XTLS/Xray-core/releases/download/v$ver"
+	curl -fsSL --retry 5 --retry-delay 3 -o "$TMP/$zip" "$base/$zip" || return 1
+	curl -fsSL --retry 5 --retry-delay 3 -o "$TMP/$zip.dgst" "$base/$zip.dgst" || return 1
+	want="$(sed -n 's/^SHA2-256= *//p' "$TMP/$zip.dgst" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
+	got="$(sha256sum "$TMP/$zip" | cut -d' ' -f1)"
+	if [ -z "$want" ] || [ "$want" != "$got" ]; then
+		printf 'xray %s: checksum mismatch\n' "$ver"
+		return 1
+	fi
+	rm -rf "$TMP/xray"
+	mkdir -p "$TMP/xray"
+	unzip -oq "$TMP/$zip" xray geoip.dat geosite.dat -d "$TMP/xray" || return 1
+	XRAY_VER=$ver
+}
+
+# download_xray leaves xray and geo files in $TMP/xray/: the latest stable
+# release, or the version Swift was tested with when the latest is unavailable.
 download_xray() {
 	mkdir -p "$TMP/xray"
 	if [ -n "$FROM_DIR" ]; then
 		cp "$FROM_DIR/xray/xray" "$FROM_DIR/xray/geoip.dat" "$FROM_DIR/xray/geosite.dat" "$TMP/xray/"
 		return
 	fi
-	local ver zip want got
-	ver="$("$TMP/swift" version --xray)"
-	zip="Xray-linux-${XRAY_ARCH}.zip"
-	fetch "https://github.com/XTLS/Xray-core/releases/download/v$ver/$zip" "$TMP/$zip"
-	fetch "https://github.com/XTLS/Xray-core/releases/download/v$ver/$zip.dgst" "$TMP/$zip.dgst"
-	want="$(sed -n 's/^SHA2-256= *//p' "$TMP/$zip.dgst" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
-	got="$(sha256sum "$TMP/$zip" | cut -d' ' -f1)"
-	if [ -z "$want" ] || [ "$want" != "$got" ]; then
-		die "$(L "Xray checksum mismatch" "Контрольная сумма Xray не совпала")" "$(L "The download is corrupted. Run the installer again." "Файл повреждён при загрузке. Запустите установку снова.")"
+	local latest
+	XRAY_PINNED="$("$TMP/swift" version --xray)"
+	latest="$(latest_xray)"
+	if [ -n "$latest" ] && [ "$latest" != "$XRAY_PINNED" ]; then
+		if xray_zip "$latest"; then return 0; fi
+		printf 'xray %s unavailable, using %s\n' "$latest" "$XRAY_PINNED"
 	fi
-	unzip -oq "$TMP/$zip" xray geoip.dat geosite.dat -d "$TMP/xray"
+	xray_zip "$XRAY_PINNED" ||
+		die "$(L "Could not download Xray $XRAY_PINNED" "Не удалось скачать Xray $XRAY_PINNED")" "$(L "Make sure the server can reach github.com and run the installer again." "Проверьте, что сервер видит github.com, и запустите установку снова.")"
+}
+
+# pinned_xray replaces a newer Xray that rejected the config with the tested one.
+pinned_xray() {
+	if [ -z "$XRAY_PINNED" ] || [ "$XRAY_VER" = "$XRAY_PINNED" ]; then return 1; fi
+	printf 'xray %s rejected the config, installing %s\n' "$XRAY_VER" "$XRAY_PINNED"
+	xray_zip "$XRAY_PINNED" || return 1
+	install_binaries
 }
 
 install_binaries() {
@@ -513,7 +548,10 @@ do_install() {
 	help="$("$BIN" setup -h 2>&1 || true)"
 	case "$help" in *-lang*) args+=(-lang "$UI_LANG") ;; esac
 	if [ -n "$DOMAIN" ]; then args+=(-domain "$DOMAIN"); fi
-	"$BIN" setup "${args[@]}"
+	if ! "$BIN" setup "${args[@]}"; then
+		pinned_xray
+		"$BIN" setup "${args[@]}"
+	fi
 	step 84 "$(L "Network settings" "Настройка сети")"
 	enable_bbr
 	write_unit
@@ -573,6 +611,9 @@ do_update() {
 	step 75 "$(L "Installing files" "Установка файлов")"
 	systemctl stop swift
 	install_binaries
+	if [ -f "$DATA/xray/config.json" ] && ! "$LIB/xray" run -test -c "$DATA/xray/config.json"; then
+		pinned_xray
+	fi
 	write_unit
 	step 90 "$(L "Starting the panel" "Запуск панели")"
 	start_service

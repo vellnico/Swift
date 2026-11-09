@@ -24,14 +24,15 @@ func main() {
 	dir := flag.String("dir", ".cache/xray", "destination directory")
 	goos := flag.String("os", runtime.GOOS, "target OS")
 	goarch := flag.String("arch", runtime.GOARCH, "target architecture")
+	version := flag.String("version", xray.Version, "Xray-core release (default: the pinned one)")
 	flag.Parse()
-	if err := fetch(*dir, *goos, *goarch); err != nil {
+	if err := fetch(*dir, *goos, *goarch, *version); err != nil {
 		fmt.Fprintln(os.Stderr, "fetchxray:", err)
 		os.Exit(1)
 	}
 }
 
-func fetch(dir, goos, goarch string) error {
+func fetch(dir, goos, goarch, version string) error {
 	name, err := xray.AssetName(goos, goarch)
 	if err != nil {
 		return err
@@ -41,13 +42,13 @@ func fetch(dir, goos, goarch string) error {
 		bin = "xray.exe"
 	}
 	stamp := filepath.Join(dir, "VERSION")
-	if b, err := os.ReadFile(stamp); err == nil && strings.TrimSpace(string(b)) == xray.Version {
+	if b, err := os.ReadFile(stamp); err == nil && strings.TrimSpace(string(b)) == version {
 		if _, err := os.Stat(filepath.Join(dir, bin)); err == nil {
-			fmt.Println("xray", xray.Version, "already in", dir)
+			fmt.Println("xray", version, "already in", dir)
 			return nil
 		}
 	}
-	base := "https://github.com/XTLS/Xray-core/releases/download/v" + xray.Version + "/"
+	base := "https://github.com/XTLS/Xray-core/releases/download/v" + version + "/"
 	archive, err := download(base + name)
 	if err != nil {
 		return err
@@ -81,10 +82,10 @@ func fetch(dir, goos, goarch string) error {
 			return err
 		}
 	}
-	if err := os.WriteFile(stamp, []byte(xray.Version+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(stamp, []byte(version+"\n"), 0o644); err != nil {
 		return err
 	}
-	fmt.Println("xray", xray.Version, "installed into", dir)
+	fmt.Println("xray", version, "installed into", dir)
 	return nil
 }
 

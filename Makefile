@@ -61,7 +61,7 @@ e2e: .cache/sing-box/sing-box
 	$(GO) test -count=1 -tags e2e -v -run TestTraffic ./internal/sub/
 
 xray:
-	$(GO) run ./tools/fetchxray -dir .cache/xray
+	$(GO) run ./tools/fetchxray -dir .cache/xray $(if $(XRAY_VERSION),-version $(XRAY_VERSION))
 
 golden:
 	$(GO) test $(GO_PKGS) -update
