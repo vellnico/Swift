@@ -13,6 +13,7 @@ A lightweight web panel for a single VPN server running [Xray-core](https://gith
 - **Live overview:** CPU, memory and network without polling, Xray status, event journal.
 - **Xray updates from the panel:** SHA256 check, config check with the new version and an automatic rollback if the core does not come up.
 - **Panel updates:** a nightly check for new Swift releases, one-click update and optional automatic updates at night, with SHA256 verification and a database backup.
+- **Auto-select and checks:** apps switch to the profile that works (Hiddify every minute, v2rayNG through a balancing “Swift · Auto” server, Happ on open); the panel tests every profile from the server and suggests fixes. Both can be switched off.
 - **One binary:** Go without CGO, SQLite inside, the UI embedded. About 20 MB of memory.
 
 ## Install

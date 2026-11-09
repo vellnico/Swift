@@ -206,6 +206,54 @@ func TestTrafficThroughEveryProfile(t *testing.T) {
 		}
 	})
 
+	// auto-select: the first profile is dead (nothing listens on its port), clients must move on
+	dead := profiles[0]
+	dead.ID, dead.Name, dead.Port = 9, "Dead", freeTCP(t)
+	auto := sub.Request{User: user, AutoSelect: true, Endpoints: append([]links.Endpoint{{Host: "127.0.0.1", Profile: dead}}, req.Endpoints...)}
+	t.Run("auto-select", func(t *testing.T) {
+		raw, err := sub.SingBox(auto)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var c map[string]any
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.Fatal(err)
+		}
+		port := freeTCP(t)
+		c["inbounds"] = []any{map[string]any{"type": "mixed", "tag": "in", "listen": "127.0.0.1", "listen_port": port}}
+		path := filepath.Join(t.TempDir(), "sing-box.json")
+		writeJSON(t, path, c)
+		out := start(t, singBox, "run", "-c", path)
+		if err := fetch(port); err != nil {
+			t.Fatalf("sing-box urltest did not leave the dead profile: %v
+%s", err, out)
+		}
+
+		raw, err = sub.XrayJSON(auto)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var configs []map[string]any
+		if err := json.Unmarshal(raw, &configs); err != nil {
+			t.Fatal(err)
+		}
+		x := configs[0]
+		if x["remarks"] != sub.AutoName {
+			t.Fatalf("first config is %v", x["remarks"])
+		}
+		httpPort := freeTCP(t)
+		ins := x["inbounds"].([]any)
+		ins[0].(map[string]any)["port"] = freeTCP(t)
+		ins[1].(map[string]any)["port"] = httpPort
+		path = filepath.Join(t.TempDir(), "xray-auto.json")
+		writeJSON(t, path, x)
+		out = start(t, xrayBin, "run", "-c", path)
+		if err := fetch(httpPort); err != nil {
+			t.Fatalf("xray balancer did not leave the dead profile: %v
+%s", err, out)
+		}
+	})
+
 	t.Run("xray", func(t *testing.T) {
 		raw, err := sub.XrayJSON(req)
 		if err != nil {

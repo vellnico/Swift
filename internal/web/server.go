@@ -70,6 +70,8 @@ func New(d Deps) *Server {
 	s.registerSettings()
 	if d.Store != nil {
 		s.registerRouting()
+		s.Handle("GET /api/settings/subscriptions", s.getSubOptions)
+		s.Handle("PUT /api/settings/subscriptions", s.putSubOptions)
 	}
 	return s
 }

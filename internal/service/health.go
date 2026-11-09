@@ -314,6 +314,9 @@ func (h *Health) ApplyFix(ctx context.Context, profileID int64, fix HealthFix) (
 			return p, &ValidationError{Fields: map[string]string{"fix": "invalid"}}
 		}
 		params := p.Params
+		if params.Fingerprint == "" {
+			params.Fingerprint = xray.DefaultFingerprint
+		}
 		params.Target = net.JoinHostPort(fix.Value, "443")
 		params.ServerNames = []string{fix.Value}
 		updated, err := h.Profiles.Update(ctx, profileID, Update{Params: &params})

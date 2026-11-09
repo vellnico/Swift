@@ -15,6 +15,7 @@
   import Sparkline from '../lib/ui/Sparkline.svelte';
   import StatusDot from '../lib/ui/StatusDot.svelte';
   import Page from '../shell/Page.svelte';
+  import HealthCard from './dashboard/HealthCard.svelte';
 
   interface Overview {
     profiles: number;
@@ -134,6 +135,7 @@
         </Card>
       </div>
     {/if}
+    <div class="wide" in:fadeShift={{ delay: stagger(7) }}><HealthCard /></div>
   </div>
 </Page>
 
@@ -161,6 +163,7 @@
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--s4); }
   .cards :global(.card) { display: flex; flex-direction: column; gap: var(--s2); height: 100%; }
   .label { margin-bottom: var(--s1); }
+  .wide { grid-column: 1 / -1; }
   .row { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
   .bar { height: 4px; border-radius: var(--radius-pill); background: var(--surface-3); overflow: hidden; margin-top: var(--s2); }
   .bar span { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform var(--dur-slow) var(--ease-out); }

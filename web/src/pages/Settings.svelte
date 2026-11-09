@@ -13,6 +13,7 @@
   import PasswordSection from './settings/PasswordSection.svelte';
   import ServerSection from './settings/ServerSection.svelte';
   import SwiftSection from './settings/SwiftSection.svelte';
+  import SubscriptionsSection from './settings/SubscriptionsSection.svelte';
   import XraySection from './settings/XraySection.svelte';
   import type { PanelInfo } from './settings/panel';
 
@@ -27,6 +28,7 @@
   <div class="sections">
     <div in:fadeShift={{ delay: stagger(0) }}><ServerSection bind:info={panel} /></div>
     <div in:fadeShift={{ delay: stagger(1) }}><CertSection /></div>
+    <div id="subscriptions" in:fadeShift={{ delay: stagger(2) }}><SubscriptionsSection /></div>
     <div in:fadeShift={{ delay: stagger(2) }}><PanelSection bind:info={panel} /></div>
     <div in:fadeShift={{ delay: stagger(3) }}>
       <Card>

@@ -20,10 +20,6 @@ func (s *Server) registerSettings() {
 		s.Handle("POST /api/xray/check", s.xrayCheck)
 		s.Handle("POST /api/xray/update", s.xrayUpdate)
 	}
-	if s.Store != nil {
-		s.Handle("GET /api/settings/subscriptions", s.getSubOptions)
-		s.Handle("PUT /api/settings/subscriptions", s.putSubOptions)
-	}
 	if s.Health != nil {
 		s.Handle("GET /api/diagnostics", s.diagnostics)
 		s.Handle("POST /api/diagnostics/check", s.diagnosticsCheck)
