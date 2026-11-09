@@ -587,6 +587,7 @@ do_update() {
 	step 75 "$(L "Installing files" "Установка файлов")"
 	systemctl stop swift
 	install_binaries
+	open_http # the panel replaces a self-signed certificate with a Let's Encrypt one for the IP
 	write_unit
 	step 90 "$(L "Starting the panel" "Запуск панели")"
 	start_service
