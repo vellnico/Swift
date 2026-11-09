@@ -28,7 +28,7 @@ export function section(_node: Element, { y = 6 } = {}): TransitionConfig {
 }
 
 /** Rise in from blur, used for QR codes and the dashboard reveal. */
-export function unblur(_node: Element, { duration = dur.slow, delay = 0 } = {}): TransitionConfig {
+export function unblur(_node: Element, { duration = dur.slow, delay = 0 }: { duration?: number; delay?: number } = {}): TransitionConfig {
   if (reducedMotion()) return { duration: dur.fast, delay, css: (t) => `opacity:${t}` };
   return {
     duration,
@@ -43,7 +43,9 @@ export function stagger(index: number): number {
   return reducedMotion() ? 0 : Math.min(index, 8) * 20;
 }
 
-export function fadeShift(_node: Element, { delay = 0, y = 8, duration = dur.base } = {}): TransitionConfig {
+type Opts = { delay?: number; y?: number; duration?: number };
+
+export function fadeShift(_node: Element, { delay = 0, y = 8, duration = dur.base }: Opts = {}): TransitionConfig {
   if (reducedMotion()) return { duration: dur.fast, delay, css: (t) => `opacity:${t}` };
   return {
     duration,

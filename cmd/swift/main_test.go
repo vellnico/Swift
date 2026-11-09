@@ -28,6 +28,33 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestAdminResetAndShow(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SWIFT_DATA_DIR", dir)
+	var out bytes.Buffer
+	if err := run([]string{"admin", "show", "-config", ""}, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("swift admin reset")) {
+		t.Fatalf("show without admin: %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"admin", "reset", "-config", ""}, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`Login:\s+([a-z0-9]{8})\s+Password: (\S{20})`).FindStringSubmatch(out.String())
+	if m == nil {
+		t.Fatalf("reset output: %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"admin", "show", "-config", ""}, &out, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out.Bytes(), []byte("Login: "+m[1])) || bytes.Contains(out.Bytes(), []byte(m[2])) {
+		t.Fatalf("show must print the login and never the password: %q", out.String())
+	}
+}
+
 func TestPanelAddressGeneratedOnceAndPersisted(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "swift.db"))

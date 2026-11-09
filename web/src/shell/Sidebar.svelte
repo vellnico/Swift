@@ -8,6 +8,11 @@
   import StatusDot from '../lib/ui/StatusDot.svelte';
   import LangSwitch from './LangSwitch.svelte';
   import { sidebarItems } from './nav';
+  import LogOut from '@lucide/svelte/icons/log-out';
+  import IconButton from '../lib/ui/IconButton.svelte';
+  import { logout } from '../lib/session.svelte';
+
+  let { hideLogo = false }: { hideLogo?: boolean } = $props();
 
   const links: HTMLElement[] = $state([]);
   const bar = new Spring({ y: 0, h: 0 }, spring(soft));
@@ -29,7 +34,7 @@
 
 <aside class="sidebar">
   <a class="brand" href={href('/')} aria-label="Swift">
-    <Logo size={22} />
+    <span data-logo-target style:visibility={hideLogo ? 'hidden' : undefined}><Logo size={22} /></span>
   </a>
   <nav aria-label={t('nav.main')}>
     <ul>
@@ -54,7 +59,10 @@
   </nav>
   <div class="foot">
     <StatusDot status={live.xray} label={statusLabel} />
-    <LangSwitch />
+    <div class="tools">
+      <LangSwitch />
+      <IconButton label={t('nav.logout')} onclick={logout}><LogOut size={18} strokeWidth={1.5} /></IconButton>
+    </div>
   </div>
 </aside>
 
@@ -103,9 +111,10 @@
   .foot {
     margin-top: auto;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--s2);
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--s4);
     padding: var(--s2);
   }
+  .tools { display: flex; align-items: center; justify-content: space-between; }
 </style>

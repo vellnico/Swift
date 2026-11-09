@@ -3,28 +3,57 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/vellnico/swift/internal/auth"
+	"github.com/vellnico/swift/internal/store"
 )
 
-type Server struct {
+type Deps struct {
 	PanelPath string // without slashes
 	Assets    fs.FS
 	Log       *slog.Logger
-	api       *http.ServeMux
+	Store     *store.Store
+	Auth      *auth.Manager
+	Limiter   *auth.Limiter
+	// OnEvent is called after a journal entry is written (used to push it over SSE).
+	OnEvent func(store.Event)
 }
 
-func New(panelPath string, assets fs.FS, log *slog.Logger) *Server {
-	s := &Server{PanelPath: strings.Trim(panelPath, "/"), Assets: assets, Log: log, api: http.NewServeMux()}
+type Server struct {
+	Deps
+	api *http.ServeMux
+}
+
+func New(d Deps) *Server {
+	d.PanelPath = strings.Trim(d.PanelPath, "/")
+	if d.Log == nil {
+		d.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	if d.Limiter == nil {
+		d.Limiter = auth.NewLimiter()
+	}
+	s := &Server{Deps: d, api: http.NewServeMux()}
 	s.api.HandleFunc("GET /api/health", s.health)
+	s.api.HandleFunc("GET /api/auth/session", s.session)
+	s.api.HandleFunc("POST /api/auth/login", s.login)
+	s.Handle("POST /api/auth/logout", s.logout)
+	s.Handle("POST /api/auth/password", s.changePassword)
 	return s
 }
 
-// API exposes the mux so other packages can register routes relative to the panel root.
-func (s *Server) API() *http.ServeMux { return s.api }
+// Handle registers a route that requires a valid admin session.
+func (s *Server) Handle(pattern string, h http.HandlerFunc) {
+	s.api.Handle(pattern, s.requireSession(h))
+}
+
+func (s *Server) cookiePath() string { return "/" + s.PanelPath + "/" }
 
 func (s *Server) Handler() http.Handler {
 	prefix := "/" + s.PanelPath
@@ -44,9 +73,14 @@ func (s *Server) Handler() http.Handler {
 			r2.URL.RawPath = ""
 			h, pattern := s.api.Handler(r2)
 			if pattern == "" {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+				writeError(w, http.StatusNotFound, "not_found")
 				return
 			}
+			if !s.csrfOK(r2) {
+				writeError(w, http.StatusForbidden, "csrf")
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
 			h.ServeHTTP(w, r2)
 			return
 		}
@@ -79,6 +113,7 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request, name string) {
 		_, _ = w.Write([]byte("Swift: frontend is not built, run make build\n"))
 		return
 	}
+	s.ensureCSRF(w, r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(body)
@@ -98,6 +133,28 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// WriteJSON is exported for handlers registered from other packages.
+func WriteJSON(w http.ResponseWriter, code int, v any) { writeJSON(w, code, v) }
+
+func writeError(w http.ResponseWriter, code int, key string) {
+	writeJSON(w, code, map[string]string{"error": key})
+}
+
+// WriteError sends {"error": key}; key is an i18n suffix the UI understands.
+func WriteError(w http.ResponseWriter, code int, key string) { writeError(w, code, key) }
+
+// DecodeJSON reads a small JSON body into v.
+func DecodeJSON(r *http.Request, v any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return errors.Join(errBadRequest, err)
+	}
+	return nil
+}
+
+var errBadRequest = errors.New("bad request")
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

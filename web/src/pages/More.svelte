@@ -1,5 +1,8 @@
 <script lang="ts">
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
+  import LogOut from '@lucide/svelte/icons/log-out';
+  import { logout } from '../lib/session.svelte';
+  import Button from '../lib/ui/Button.svelte';
   import { t } from '../lib/i18n/index.svelte';
   import { href } from '../lib/router.svelte';
   import Card from '../lib/ui/Card.svelte';
@@ -27,6 +30,12 @@
   <div class="lang">
     <span class="muted">{t('lang.label')}</span>
     <LangSwitch />
+  </div>
+  <div>
+    <Button variant="secondary" onclick={logout}>
+      {#snippet icon()}<LogOut size={18} strokeWidth={1.5} />{/snippet}
+      {t('nav.logout')}
+    </Button>
   </div>
 </Page>
 

@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vellnico/swift/internal/auth"
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/store"
 	"github.com/vellnico/swift/internal/web"
@@ -92,7 +93,17 @@ func serve(cfgPath string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	srv := web.New(path, webassets.Panel(), log)
+	srv := web.New(web.Deps{
+		PanelPath: path,
+		Assets:    webassets.Panel(),
+		Log:       log,
+		Store:     st,
+		Auth:      auth.NewManager(st),
+	})
+	if _, err := st.FirstAdmin(ctx); errors.Is(err, store.ErrNotFound) {
+		fmt.Fprintln(stdout, "No administrator yet: run `swift admin reset` to create one.")
+	}
+	go sessionGC(ctx, st, log)
 	hs := &http.Server{
 		Addr:              net.JoinHostPort(cfg.Listen, strconv.Itoa(port)),
 		Handler:           srv.Handler(),
@@ -174,9 +185,17 @@ func randomPath(n int) string {
 	return string(b)
 }
 
-func admin(args []string, stdout io.Writer) error {
-	if len(args) == 0 {
-		return errors.New("usage: swift admin show|reset")
+func sessionGC(ctx context.Context, st *store.Store, log *slog.Logger) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if err := st.DeleteExpiredSessions(ctx); err != nil && ctx.Err() == nil {
+			log.Error("session cleanup", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
 	}
-	return fmt.Errorf("admin %s: not available yet", args[0])
 }
