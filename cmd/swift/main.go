@@ -129,6 +129,7 @@ func serve(cfgPath string, stdout io.Writer) error {
 	a.swift.Restart = stop // systemd (Restart=always) starts the new binary
 	a.swift.ReportStartup(ctx)
 	go a.swift.RunChecks(ctx)
+	go a.health.Run(ctx)
 
 	panelH, subH := a.handlers(port, subPort)
 	errc := make(chan error, 4)

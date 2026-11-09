@@ -101,7 +101,7 @@ func (s *Subscriptions) Request(ctx context.Context, u store.User, fallbackHost 
 	if err != nil {
 		return sub.Request{}, err
 	}
-	r := sub.Request{User: ToXrayUser(u), Endpoints: eps}
+	r := sub.Request{User: ToXrayUser(u), Endpoints: eps, AutoSelect: AutoSelect(ctx, s.Store)}
 	if s.Routing != nil {
 		if r.Routing, err = s.Routing(ctx); err != nil {
 			return r, err
@@ -152,4 +152,33 @@ func EnsureSubPort(ctx context.Context, st *store.Store, configured, panelPort i
 		return 0, err
 	}
 	return p, nil
+}
+
+// AutoSelect reports whether subscriptions let clients switch to the profile
+// that works (on unless switched off in Settings).
+func AutoSelect(ctx context.Context, st *store.Store) bool {
+	v, err := st.Setting(ctx, "sub_autoselect")
+	return err != nil || v != "0"
+}
+
+// HealthChecks reports whether the panel tests every profile in the background
+// (on unless switched off in Settings).
+func HealthChecks(ctx context.Context, st *store.Store) bool {
+	v, err := st.Setting(ctx, "health_checks")
+	return err != nil || v != "0"
+}
+
+func boolSetting(on bool) string {
+	if on {
+		return "1"
+	}
+	return "0"
+}
+
+// SetSubscriptionOptions stores the two switches of Settings → Subscriptions.
+func SetSubscriptionOptions(ctx context.Context, st *store.Store, autoSelect, healthChecks bool) error {
+	if err := st.SetSetting(ctx, "sub_autoselect", boolSetting(autoSelect)); err != nil {
+		return err
+	}
+	return st.SetSetting(ctx, "health_checks", boolSetting(healthChecks))
 }

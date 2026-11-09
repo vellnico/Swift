@@ -114,6 +114,14 @@ func (s *SubServer) subscription(w http.ResponseWriter, r *http.Request, token s
 				h.Set("routing", v)
 			}
 		}
+		if sub.Client(r.UserAgent()) == "happ" && u.Enabled && req.AutoSelect {
+			// Happ has no balancer: it tests every profile with a real request when opened
+			// and connects to the fastest one (happ.su, app management headers)
+			h.Set("subscription-ping-onopen-enabled", "true")
+			h.Set("ping-type", "proxy")
+			h.Set("subscriptions-sort-type", "ping")
+			h.Set("subscription-autoconnect-type", "lowestdelay")
+		}
 		s.write(w, "text/plain; charset=utf-8", func() ([]byte, error) { return sub.Base64(req) })
 	}
 }

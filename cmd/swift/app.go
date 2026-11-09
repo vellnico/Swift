@@ -45,6 +45,7 @@ type app struct {
 	holder   *certsPkg.Holder
 	updater  *service.XrayUpdater
 	swift    *service.SwiftUpdater
+	health   *service.Health
 	panel    *service.Panel
 
 	xrayVersion atomic.Pointer[string]
@@ -194,10 +195,15 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 		},
 	}
 
+	a.health = &service.Health{
+		Xray: a.xray, Subs: a.subs, Profiles: a.profiles, Prober: xray.TLSProber{Timeout: 3 * time.Second}, Event: a.event,
+		OnReport: func(r service.HealthReport) { a.bus.Publish("health", r) },
+	}
 	a.srv = web.New(web.Deps{
 		Panel:     a.panel,
 		Updater:   a.updater,
 		Swift:     a.swift,
+		Health:    a.health,
 		PanelPort: func() int { return int(a.panelPort.Load()) },
 		PanelPath: panelPath,
 		Assets:    webassets.Panel(),

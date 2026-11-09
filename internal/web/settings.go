@@ -20,6 +20,15 @@ func (s *Server) registerSettings() {
 		s.Handle("POST /api/xray/check", s.xrayCheck)
 		s.Handle("POST /api/xray/update", s.xrayUpdate)
 	}
+	if s.Store != nil {
+		s.Handle("GET /api/settings/subscriptions", s.getSubOptions)
+		s.Handle("PUT /api/settings/subscriptions", s.putSubOptions)
+	}
+	if s.Health != nil {
+		s.Handle("GET /api/diagnostics", s.diagnostics)
+		s.Handle("POST /api/diagnostics/check", s.diagnosticsCheck)
+		s.Handle("POST /api/diagnostics/fix", s.diagnosticsFix)
+	}
 	if s.Swift != nil {
 		s.Handle("GET /api/swift/release", s.swiftRelease)
 		s.Handle("POST /api/swift/check", s.swiftCheck)
@@ -178,4 +187,64 @@ func (s *Server) swiftAuto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.Swift.Info(r.Context()))
+}
+
+type subOptions struct {
+	AutoSelect   bool `json:"autoSelect"`
+	HealthChecks bool `json:"healthChecks"`
+}
+
+func (s *Server) subOptions(ctx context.Context) subOptions {
+	return subOptions{AutoSelect: service.AutoSelect(ctx, s.Store), HealthChecks: service.HealthChecks(ctx, s.Store)}
+}
+
+func (s *Server) getSubOptions(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.subOptions(r.Context()))
+}
+
+func (s *Server) putSubOptions(w http.ResponseWriter, r *http.Request) {
+	var body subOptions
+	if err := DecodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if err := service.SetSubscriptionOptions(r.Context(), s.Store, body.AutoSelect, body.HealthChecks); err != nil {
+		s.serviceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.subOptions(r.Context()))
+}
+
+func (s *Server) diagnostics(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Health.Report(r.Context()))
+}
+
+func (s *Server) diagnosticsCheck(w http.ResponseWriter, r *http.Request) {
+	// the check outlives a closed tab; the result also arrives over SSE
+	rep, err := s.Health.Check(context.WithoutCancel(r.Context()))
+	switch {
+	case errors.Is(err, service.ErrHealthBusy):
+		writeError(w, http.StatusConflict, "check_busy")
+	case err != nil:
+		s.serviceError(w, err)
+	default:
+		writeJSON(w, http.StatusOK, rep)
+	}
+}
+
+func (s *Server) diagnosticsFix(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ProfileID int64  `json:"profileId"`
+		Action    string `json:"action"`
+		Value     string `json:"value"`
+	}
+	if err := DecodeJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	if _, err := s.Health.ApplyFix(r.Context(), body.ProfileID, service.HealthFix{Action: body.Action, Value: body.Value}); err != nil {
+		s.serviceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.Health.Report(r.Context()))
 }

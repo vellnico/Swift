@@ -180,3 +180,51 @@ func TestDetect(t *testing.T) {
 		t.Error("client name")
 	}
 }
+
+func TestAutoSelect(t *testing.T) {
+	req := Request{User: user, Endpoints: eps, AutoSelect: true, Routing: routing.RUDirect{}}
+	sb, err := SingBox(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "singbox_auto.json", sb)
+	if !strings.Contains(string(sb), `"urltest"`) {
+		t.Fatal("no urltest with auto-select")
+	}
+	plain, _ := SingBox(Request{User: user, Endpoints: eps})
+	if strings.Contains(string(plain), `"urltest"`) {
+		t.Fatal("urltest without auto-select")
+	}
+
+	xj, err := XrayJSON(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "xray_auto.json", xj)
+	var configs []map[string]any
+	if err := json.Unmarshal(xj, &configs); err != nil || len(configs) != 4 || configs[0]["remarks"] != AutoName {
+		t.Fatalf("want the Auto config first and then 3 profiles: %v", err)
+	}
+	rules := configs[0]["routing"].(map[string]any)["rules"].([]any)
+	if last := rules[len(rules)-1].(map[string]any); last["balancerTag"] != "auto" || len(rules) < 3 {
+		t.Fatalf("balancer must come after the preset rules: %v", rules)
+	}
+	bin := xray.TestBinary()
+	if bin == "" {
+		t.Fatal("xray binary not found: run `make xray`")
+	}
+	raw, _ := json.Marshal(configs[0])
+	p := filepath.Join(t.TempDir(), "auto.json")
+	if err := os.WriteFile(p, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (xray.ExecRunner{}).Test(context.Background(), bin, p); err != nil {
+		t.Fatalf("Auto config rejected by xray: %v", err)
+	}
+
+	// one profile: nothing to choose from
+	one, _ := XrayJSON(Request{User: user, Endpoints: eps[:1], AutoSelect: true})
+	if strings.Contains(string(one), AutoName) {
+		t.Fatal("Auto config with a single profile")
+	}
+}

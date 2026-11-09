@@ -33,6 +33,7 @@ type Deps struct {
 	Panel     *service.Panel
 	Updater   *service.XrayUpdater
 	Swift     *service.SwiftUpdater
+	Health    *service.Health
 	// PanelPort returns the port the panel listens on now.
 	PanelPort func() int
 	// OnEvent is called after a journal entry is written (used to push it over SSE).

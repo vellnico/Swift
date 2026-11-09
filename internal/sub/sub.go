@@ -74,7 +74,12 @@ type Request struct {
 	User      xray.User
 	Endpoints []links.Endpoint // enabled profiles only
 	Routing   Routing
+	// AutoSelect lets clients switch to whichever profile works (SPEC 7.5).
+	AutoSelect bool
 }
+
+// ProbeURL is what clients fetch to tell a working profile from a broken one.
+const ProbeURL = "https://www.gstatic.com/generate_204"
 
 // Links returns the share links, empty for a disabled user.
 func Links(r Request) ([]string, error) {

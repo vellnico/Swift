@@ -31,9 +31,13 @@ func SingBox(r Request) ([]byte, error) {
 		cfg["route"] = map[string]any{"rules": []any{map[string]any{"action": "reject"}}, "final": "direct"}
 		return encode(cfg)
 	}
-	head := []any{
-		map[string]any{"type": "selector", "tag": "proxy", "outbounds": append([]string{"auto"}, tags...), "default": "auto"},
-		map[string]any{"type": "urltest", "tag": "auto", "outbounds": tags, "url": "https://www.gstatic.com/generate_204", "interval": "3m"},
+	head := []any{map[string]any{"type": "selector", "tag": "proxy", "outbounds": tags, "default": tags[0]}}
+	if r.AutoSelect && len(tags) > 1 {
+		head = []any{
+			map[string]any{"type": "selector", "tag": "proxy", "outbounds": append([]string{"auto"}, tags...), "default": "auto"},
+			// a profile cut by DPI fails the probe within a minute; 100 ms of tolerance keeps it from flapping
+			map[string]any{"type": "urltest", "tag": "auto", "outbounds": tags, "url": ProbeURL, "interval": "1m", "tolerance": 100},
+		}
 	}
 	outbounds = append(head, outbounds...)
 	outbounds = append(outbounds, map[string]any{"type": "direct", "tag": "direct"})

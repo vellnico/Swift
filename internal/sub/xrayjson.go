@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/vellnico/swift/internal/links"
@@ -8,12 +9,17 @@ import (
 )
 
 // XrayJSON renders an array of complete Xray client configs, one per
-// profile, which v2rayNG imports as separate servers.
+// profile, which v2rayNG imports as separate servers. With AutoSelect the
+// first one, "Swift · Auto", holds every profile behind a balancer that
+// probes them and uses the fastest working one.
 func XrayJSON(r Request) ([]byte, error) {
 	configs := []any{}
 	if r.User.Enabled {
+		if r.AutoSelect && len(r.Endpoints) > 1 {
+			configs = append(configs, xrayAuto(r))
+		}
 		for _, e := range r.Endpoints {
-			cfg := xrayClient(e, r.User)
+			cfg := xrayClient(links.Name(e.Profile), []any{xrayOutbound(e, r.User)})
 			if r.Routing != nil {
 				r.Routing.Xray(cfg)
 			}
@@ -23,21 +29,53 @@ func XrayJSON(r Request) ([]byte, error) {
 	return encode(configs)
 }
 
-func xrayClient(e links.Endpoint, u xray.User) map[string]any {
+// AutoName is the label of the balancing config in client apps.
+const AutoName = "Swift · Auto"
+
+func xrayAuto(r Request) map[string]any {
+	proxies := make([]any, 0, len(r.Endpoints))
+	for i, e := range r.Endpoints {
+		ob := xrayOutbound(e, r.User)
+		ob["tag"] = fmt.Sprintf("proxy-%d", i+1)
+		proxies = append(proxies, ob)
+	}
+	cfg := xrayClient(AutoName, proxies)
+	cfg["observatory"] = map[string]any{
+		"subjectSelector":   []string{"proxy-"},
+		"probeUrl":          ProbeURL,
+		"probeInterval":     "1m",
+		"enableConcurrency": true,
+	}
+	if r.Routing != nil {
+		r.Routing.Xray(cfg)
+	}
+	routing := cfg["routing"].(map[string]any)
+	routing["balancers"] = []any{map[string]any{
+		"tag":         "auto",
+		"selector":    []string{"proxy-"},
+		"strategy":    map[string]any{"type": "leastPing"},
+		"fallbackTag": "proxy-1",
+	}}
+	// after the preset rules: whatever is not sent direct goes to the balancer
+	routing["rules"] = append(routing["rules"].([]any), map[string]any{"network": "tcp,udp", "balancerTag": "auto"})
+	return cfg
+}
+
+func xrayClient(remarks string, proxies []any) map[string]any {
 	sniff := map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}
+	outbounds := append(proxies,
+		map[string]any{"tag": "direct", "protocol": "freedom"},
+		map[string]any{"tag": "block", "protocol": "blackhole"},
+	)
 	return map[string]any{
-		"remarks": links.Name(e.Profile),
+		"remarks": remarks,
 		"log":     map[string]any{"loglevel": "warning"},
 		"inbounds": []any{
 			map[string]any{"tag": "socks", "listen": "127.0.0.1", "port": 10808, "protocol": "socks", "settings": map[string]any{"udp": true}, "sniffing": sniff},
 			map[string]any{"tag": "http", "listen": "127.0.0.1", "port": 10809, "protocol": "http", "sniffing": sniff},
 		},
-		"outbounds": []any{
-			xrayOutbound(e, u),
-			map[string]any{"tag": "direct", "protocol": "freedom"},
-			map[string]any{"tag": "block", "protocol": "blackhole"},
-		},
-		"routing": map[string]any{"domainStrategy": "AsIs", "rules": []any{}},
+		"outbounds": outbounds,
+		"routing":   map[string]any{"domainStrategy": "AsIs", "rules": []any{}},
 	}
 }
 
