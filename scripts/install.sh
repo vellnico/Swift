@@ -100,7 +100,7 @@ download_swift() {
 	if [ "$tag" = latest ]; then
 		tag="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")"
 		tag="${tag##*/}"
-		[ -n "$tag" ] && [ "$tag" != latest ] || die "cannot find the latest release of $REPO"
+		if [ -z "$tag" ] || [ "$tag" = latest ]; then die "cannot find the latest release of $REPO"; fi
 	fi
 	local file="swift_${tag#v}_linux_${ARCH}.tar.gz"
 	local base="https://github.com/$REPO/releases/download/$tag"
@@ -126,7 +126,7 @@ download_xray() {
 	fetch "https://github.com/XTLS/Xray-core/releases/download/v$ver/$zip.dgst" "$TMP/$zip.dgst"
 	want="$(sed -n 's/^SHA2-256= *//p' "$TMP/$zip.dgst" | tr -d '[:space:]' | tr 'A-F' 'a-f')"
 	got="$(sha256sum "$TMP/$zip" | cut -d' ' -f1)"
-	[ -n "$want" ] && [ "$want" = "$got" ] || die "SHA256 of $zip does not match its digest"
+	if [ -z "$want" ] || [ "$want" != "$got" ]; then die "SHA256 of $zip does not match its digest"; fi
 	unzip -oq "$TMP/$zip" xray geoip.dat geosite.dat -d "$TMP/xray"
 }
 
