@@ -486,6 +486,12 @@ port_list() {
 
 field() { printf '%s\n' "$1" | sed -n "s/^ *$2: *//p"; }
 
+# admin_show is read through "$(...)", never piped into grep -q: grep closing the
+# pipe early makes swift fail with SIGPIPE, and pipefail turns a match into a miss.
+admin_show() {
+	"$BIN" admin show -config "$ETC/swift.toml" 2>/dev/null || true
+}
+
 # --- modes -------------------------------------------------------------------
 
 do_install() {
@@ -502,7 +508,7 @@ do_install() {
 	ensure_tools
 	TMP="$(mktemp -d)"
 	local fresh=1
-	if [ -x "$BIN" ] && "$BIN" admin show -config "$ETC/swift.toml" | grep -q '^Login: [a-z0-9]\{8\}$'; then fresh=0; fi
+	if [ -x "$BIN" ] && grep -q '^Login: [a-z0-9]\{8\}$' <<<"$(admin_show)"; then fresh=0; fi
 	step 12 "$(L "Downloading Swift" "Загрузка Swift")"
 	download_swift
 	step 34 "$(L "Downloading Xray" "Загрузка Xray")"
@@ -550,7 +556,7 @@ do_install() {
 		ui "  $(L "The password is unchanged; data and profiles are kept." "Пароль прежний, данные и профили сохранены.")"
 		ui "  ${D}$(L "swift admin reset issues a new one." "Новый пароль выдаст команда swift admin reset.")${R}"
 	fi
-	if "$BIN" admin show -config "$ETC/swift.toml" | grep -q '^Certificate: self_signed$'; then
+	if grep -q '^Certificate: self_signed$' <<<"$(admin_show)"; then
 		ui ""
 		ui "  $(L "Let's Encrypt could not issue a certificate, so the browser will warn about a self-signed one." "Let's Encrypt не выдал сертификат, поэтому браузер предупредит о самоподписанном.")"
 		ui "  ${D}$(L "Open port 80 in the host's firewall: the panel retries every 6 hours." "Откройте порт 80 в файрволе хостера: панель повторяет попытку каждые 6 часов.")${R}"

@@ -81,7 +81,8 @@ out="$(run_installer --lang ru)" || fail "second install failed: $out"
 grep -q 'Swift уже установлен' <<<"$out" || fail "second install did not report an existing setup in Russian"
 grep -q 'Пароль *[^ ]\{20\} *│$' <<<"$out" && fail "second install printed a new password"
 [ "$(ct swift ports -config /etc/swift/swift.toml)" = "$ports_before" ] || fail "second install changed ports"
-ct swift admin show -config /etc/swift/swift.toml | grep -q "^Login: $login$" || fail "second install changed the login"
+show="$(ct swift admin show -config /etc/swift/swift.toml)"
+grep -q "^Login: $login$" <<<"$show" || fail "second install changed the login"
 wait_panel
 panel_lang ru
 
