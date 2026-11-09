@@ -104,6 +104,7 @@ func serve(cfgPath string, stdout io.Writer) error {
 	}
 	go sessionGC(ctx, st, log)
 	a.startXray(ctx)
+	a.startStats(ctx)
 
 	panelH, subH := a.handlers(port, subPort)
 	servers := []*http.Server{newHTTPServer(cfg.Listen, port, panelH)}

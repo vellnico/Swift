@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/vellnico/swift/internal/config"
 	"github.com/vellnico/swift/internal/service"
 	"github.com/vellnico/swift/internal/store"
+	"github.com/vellnico/swift/internal/sysstat"
 	"github.com/vellnico/swift/internal/web"
 	"github.com/vellnico/swift/internal/xray"
 	webassets "github.com/vellnico/swift/web"
@@ -33,6 +35,7 @@ type app struct {
 	users    *service.Users
 	subs     *service.Subscriptions
 	sub      *web.SubServer
+	stats    *sysstat.Collector
 }
 
 // handlers returns the panel and subscription handlers; with one shared port
@@ -121,7 +124,64 @@ func newApp(ctx context.Context, cfg config.Config, st *store.Store, log *slog.L
 	a.srv.Handle("GET /api/xray/status", func(w http.ResponseWriter, _ *http.Request) {
 		web.WriteJSON(w, http.StatusOK, xrayStatus{a.sup.Status(), xray.Version})
 	})
+
+	switch {
+	case runtime.GOOS == "linux":
+		a.stats = &sysstat.Collector{Source: sysstat.ProcSource{Proc: os.DirFS("/proc"), DiskPath: cfg.DataDir}}
+	case cfg.Dev:
+		a.stats = &sysstat.Collector{Source: &sysstat.Fake{}}
+	}
+	a.srv.Handle("GET /api/sysstat", func(w http.ResponseWriter, _ *http.Request) {
+		if a.stats == nil {
+			web.WriteJSON(w, http.StatusOK, []sysstat.Sample{})
+			return
+		}
+		web.WriteJSON(w, http.StatusOK, a.stats.History())
+	})
+	a.srv.Handle("GET /api/overview", a.overview)
 	return a, nil
+}
+
+func (a *app) startStats(ctx context.Context) {
+	if a.stats == nil {
+		return
+	}
+	a.stats.OnSample = func(s sysstat.Sample) { a.bus.Publish("sysstat", s) }
+	go a.stats.Run(ctx)
+}
+
+// overview feeds the dashboard cards.
+func (a *app) overview(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ps, err := a.st.Profiles(ctx)
+	if err != nil {
+		web.WriteError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	us, err := a.st.Users(ctx)
+	if err != nil {
+		web.WriteError(w, http.StatusInternalServerError, "internal")
+		return
+	}
+	out := map[string]any{"profiles": len(ps), "users": len(us)}
+	enabled := 0
+	for _, p := range ps {
+		if p.Enabled {
+			enabled++
+		}
+	}
+	out["profilesEnabled"] = enabled
+	enabled = 0
+	for _, u := range us {
+		if u.Enabled {
+			enabled++
+		}
+	}
+	out["usersEnabled"] = enabled
+	if c, err := a.st.Certificate(ctx); err == nil {
+		out["cert"] = c
+	}
+	web.WriteJSON(w, http.StatusOK, out)
 }
 
 // event writes a journal entry and pushes it to connected browsers.

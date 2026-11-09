@@ -18,6 +18,7 @@
   import More from './pages/More.svelte';
   import Profiles from './pages/Profiles.svelte';
   import Users from './pages/Users.svelte';
+  import Dashboard from './pages/Dashboard.svelte';
   import { onGlobalKey } from './lib/hotkeys';
   import NotFound from './pages/NotFound.svelte';
 
@@ -72,6 +73,8 @@
             <Profiles />
           {:else if route.name === 'users'}
             <Users />
+          {:else if route.name === 'dashboard'}
+            <Dashboard />
           {:else if route.name === 'notfound'}
             <NotFound />
           {:else}
