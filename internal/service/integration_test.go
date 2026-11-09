@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,5 +155,66 @@ func TestRealXray(t *testing.T) {
 	emails, _ = client.Users(ctx, "p1")
 	if !slices.Equal(emails, []string{"u2"}) {
 		t.Fatalf("users after restart: %v", emails)
+	}
+}
+
+// The profile check sends real traffic through a real xray with a temporary
+// user that never reaches the database (SPEC 7.6).
+func TestHealthCheckWithRealXray(t *testing.T) {
+	bin := xray.TestBinary()
+	if bin == "" {
+		t.Fatal("xray binary not found: run `make xray`")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(dir, "swift.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	apiPort := freePort(t)
+	_ = st.SetSetting(ctx, "xray_api_port", strconv.Itoa(apiPort))
+	sni, err := xray.PickSNI(ctx, xray.TLSProber{Timeout: 3 * time.Second}, xray.SNICandidates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv, pub, _ := xray.RealityKeyPair()
+	if _, err := st.CreateProfile(ctx, xray.Profile{Name: "Vision", Kind: xray.KindVision, Port: freePort(t), Enabled: true, Params: xray.Params{
+		PrivateKey: priv, PublicKey: pub, ShortIDs: xray.ShortIDs(1), Target: sni + ":443", ServerNames: []string{sni}, Fingerprint: xray.DefaultFingerprint,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	client, err := xray.Dial("127.0.0.1:" + strconv.Itoa(apiPort))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	cfgPath := filepath.Join(dir, "xray", "config.json")
+	sup := &xray.Supervisor{Runner: xray.ExecRunner{}, Bin: bin, ConfigPath: cfgPath, Log: discard()}
+	x := &Xray{Store: st, Runner: xray.ExecRunner{}, Sup: sup, API: client, Bin: bin, ConfigPath: cfgPath, Log: discard()}
+	if err := x.Prepare(ctx); err != nil {
+		t.Fatal(err)
+	}
+	go sup.Run(ctx)
+	wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
+	defer wcancel()
+	if err := x.WaitAPI(wctx); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &Health{Xray: x, Prober: xray.TLSProber{Timeout: 3 * time.Second}}
+	r, err := h.Check(ctx)
+	if err != nil || len(r.Profiles) != 1 {
+		t.Fatalf("report %+v %v", r, err)
+	}
+	if p := r.Profiles[0]; !p.OK || p.LatencyMs <= 0 {
+		t.Fatalf("real traffic did not pass: %+v", p)
+	}
+	if emails, _ := client.Users(ctx, "p1"); len(emails) != 0 {
+		t.Fatalf("temporary user left in xray: %v", emails)
+	}
+	if b, _ := os.ReadFile(cfgPath); strings.Contains(string(b), "u-1") {
+		t.Fatal("temporary user written to the config")
 	}
 }
