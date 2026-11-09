@@ -30,7 +30,7 @@ die() {
 	warn "$*"
 	exit 1
 }
-cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; }
+cleanup() { if [ -n "$TMP" ]; then rm -rf "$TMP"; fi; }
 trap cleanup EXIT
 
 usage() {
