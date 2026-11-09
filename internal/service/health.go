@@ -240,7 +240,7 @@ func (h *Health) xrayTrafficTest(ctx context.Context, e links.Endpoint, u xray.U
 		return 0, fmt.Errorf("client config: %v", err)
 	}
 	cfg := cfgs[0]
-	port, err := freePort()
+	port, err := loopbackPort()
 	if err != nil {
 		return 0, err
 	}
@@ -292,7 +292,7 @@ func (h *Health) xrayTrafficTest(ctx context.Context, e links.Endpoint, u xray.U
 	return 0, last
 }
 
-func freePort() (int, error) {
+func loopbackPort() (int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return 0, err
