@@ -62,8 +62,11 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request, name string) {
 	name = path.Clean("/" + name)[1:]
 	if name != "" {
 		if st, err := fs.Stat(s.Assets, name); err == nil && !st.IsDir() {
-			if strings.HasPrefix(name, "assets/") {
+			switch {
+			case strings.HasPrefix(name, "assets/"):
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			case strings.HasPrefix(name, "fonts/"):
+				w.Header().Set("Cache-Control", "public, max-age=2592000")
 			}
 			http.ServeFileFS(w, r, s.Assets, name)
 			return

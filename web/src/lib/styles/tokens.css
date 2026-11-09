@@ -1,0 +1,79 @@
+/* The only place in web/src allowed to contain color literals (see tokens.test.ts). */
+:root {
+  /* палитра */
+  --obsidian: #050506;  --graphite-1: #0C0C0E;  --graphite-2: #131316;  --graphite-3: #1B1B1F;
+  --ash: #5E6067;  --silver: #9A9CA3;  --porcelain: #F3F4F6;  --gleam: #FFFFFF;
+
+  /* роли */
+  --bg: var(--obsidian);
+  --surface-1: var(--graphite-1);  --surface-2: var(--graphite-2);  --surface-3: var(--graphite-3);
+  --text-1: var(--porcelain);  --text-2: var(--silver);  --text-3: var(--ash);
+  --accent: var(--porcelain);  --accent-fg: var(--obsidian);
+
+  /* линии — светом, а не цветом */
+  --line: rgb(255 255 255 / 0.07);
+  --line-strong: rgb(255 255 255 / 0.14);
+  --edge: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --edge-lit: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 0 0 1px rgb(255 255 255 / 0.10);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--porcelain);
+
+  /* зерно: SVG feTurbulence, статичное, поверх фона */
+  --grain-opacity: 0.035;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* состояния — только яркостью и формой */
+  --state-ok: var(--porcelain);  --state-busy: var(--silver);  --state-off: var(--ash);
+  --state-error-bg: var(--porcelain);  --state-error-fg: var(--obsidian);
+
+  /* служебные слои */
+  --scrim: rgb(5 5 6 / 0.62);
+  --glass: rgb(12 12 14 / 0.72);
+  --gleam-band: rgb(255 255 255 / 0.18);
+  --spark-fill-top: rgb(255 255 255 / 0.10);
+  --spark-fill-bottom: rgb(255 255 255 / 0);
+  --qr-dark: #000000;  --qr-light: #FFFFFF;
+
+  /* шрифты */
+  --font-display: "Unbounded", "Onest", system-ui, sans-serif;
+  --font-text: "Onest", system-ui, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, monospace;
+
+  /* шкала: font shorthand + трекинг */
+  --t-hero: 300 56px/60px var(--font-display);       --t-hero-track: -0.03em;
+  --t-title: 400 28px/34px var(--font-display);      --t-title-track: -0.02em;
+  --t-heading: 600 19px/26px var(--font-text);       --t-heading-track: -0.01em;
+  --t-body: 400 15px/22px var(--font-text);
+  --t-small: 400 13px/18px var(--font-text);
+  --t-micro: 500 12px/16px var(--font-text);         --t-micro-track: 0.01em;
+  --t-code: 400 13px/18px var(--font-code);
+
+  /* сетка и формы */
+  --space: 4px;
+  --s1: calc(var(--space) * 1);  --s2: calc(var(--space) * 2);  --s3: calc(var(--space) * 3);
+  --s4: calc(var(--space) * 4);  --s5: calc(var(--space) * 5);  --s6: calc(var(--space) * 6);
+  --s8: calc(var(--space) * 8);  --s10: calc(var(--space) * 10); --s12: calc(var(--space) * 12);
+  --s16: calc(var(--space) * 16);
+  --radius-control: 10px;
+  --radius-surface: 18px;
+  --radius-sheet: 24px;
+  --radius-pill: 999px;
+  --control-h: 40px;
+  --icon: 18px;
+  --stroke: 1.5px;
+  --sidebar-w: 248px;
+  --content-max: 1080px;
+  --bp-desktop: 960px;
+
+  /* движение */
+  --dur-fast: 140ms;  --dur-base: 220ms;  --dur-slow: 420ms;  --dur-gleam: 1100ms;
+  --dur-spin: 900ms;  --dur-pulse: 3000ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-base: var(--dur-fast);
+    --dur-slow: var(--dur-fast);
+  }
+}

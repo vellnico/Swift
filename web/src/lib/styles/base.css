@@ -1,0 +1,82 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text-1);
+  font: var(--t-body);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* static grain over the whole app, like matte film */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--grain);
+  opacity: var(--grain-opacity);
+}
+
+#app { position: relative; z-index: 1; }
+
+h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: inherit; }
+img, svg { display: block; }
+
+:focus { outline: none; }
+:focus-visible { box-shadow: var(--focus-ring); border-radius: var(--radius-control); }
+
+::selection { background: var(--porcelain); color: var(--obsidian); }
+
+.t-hero { font: var(--t-hero); letter-spacing: var(--t-hero-track); }
+.t-title { font: var(--t-title); letter-spacing: var(--t-title-track); }
+.t-heading { font: var(--t-heading); letter-spacing: var(--t-heading-track); }
+.t-body { font: var(--t-body); }
+.t-small { font: var(--t-small); }
+.t-micro { font: var(--t-micro); letter-spacing: var(--t-micro-track); }
+.t-code { font: var(--t-code); }
+.muted { color: var(--text-2); }
+.faint { color: var(--text-3); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* the silver gleam: a soft band of light passing left to right, once */
+.gleam { position: relative; overflow: hidden; isolation: isolate; }
+.gleam::after {
+  content: "";
+  position: absolute;
+  inset: -20% auto -20% 0;
+  width: 60%;
+  background: linear-gradient(105deg, transparent 0%, var(--gleam-band) 50%, transparent 100%);
+  transform: translateX(-120%);
+  pointer-events: none;
+  z-index: 1;
+}
+.gleam.gleam-run::after { animation: gleam var(--dur-gleam) var(--ease-in-out) 1 both; }
+@keyframes gleam {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(260%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gleam.gleam-run::after { animation: none; }
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
